@@ -454,12 +454,18 @@ def run_update() -> None:
 
         sirix = fetch_sirix_data(aid)
 
+        country = None
+        balance = None
+
         equity = None
         open_pnl = None
         group_name = None
         source = "missing"
 
         if sirix:
+            country = sirix.get("Country")
+            balance = sirix.get("Balance")
+
             group_name = sirix.get("GroupName")
             open_pnl = sirix.get("OpenPnL")
 
@@ -501,6 +507,8 @@ def run_update() -> None:
             "account_id": aid,
             "customer_name": cname,
             "temp_name": tname,
+            "country": country,
+            "balance": balance,
             "plan": START_EQUITY,
             "equity": equity,
             "open_pnl": open_pnl,
