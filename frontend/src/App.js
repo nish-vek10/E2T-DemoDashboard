@@ -248,8 +248,8 @@ const accentForRank = (r) => {
   return "transparent"; // no strip for 3–20
 };
 const rankBadge = (r) => {
-  if (r === 0) return <span style={{ fontWeight: 900, fontSize: "24px" }}>🥇</span>;
-  if (r === 1) return <span style={{ fontWeight: 800, fontSize: "22px" }}>🥈</span>;
+  if (r === 0) return <span style={{ fontWeight: 1100, fontSize: "30px" }}>🥇</span>;
+  if (r === 1) return <span style={{ fontWeight: 900, fontSize: "24px" }}>🥈</span>;
   return null;
 };
 
