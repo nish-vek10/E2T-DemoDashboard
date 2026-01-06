@@ -237,18 +237,18 @@ function buildRankMap(rows) {
 
 // Top-2 only: highlight + strips; 3–20 identical
 const rowStyleForRank = (r) => {
-  if (r === 0) return { background: "rgba(212,175,55,0.12)" };  // gold (transparent)
-  if (r === 1) return { background: "rgba(176,183,195,0.10)" }; // silver (transparent)
+  if (r === 0) return { background: "#1a1505" };  // gold tint
+  if (r === 1) return { background: "#0f1420" }; // silver/blue tint
   return {};
 };
 const rowHeightForRank = (r) => (r <= 1 ? 45 : 42);
 const accentForRank = (r) => {
-  if (r === 0) return "rgba(212,175,55,0.80)";
-  if (r === 1) return "rgba(176,183,195,0.75)";
+  if (r === 0) return "#F4C430";
+  if (r === 1) return "#B0B7C3";
   return "transparent"; // no strip for 3–20
 };
 const rankBadge = (r) => {
-  if (r === 0) return <span style={{ fontWeight: 800, fontSize: "22px" }}>🥇</span>;
+  if (r === 0) return <span style={{ fontWeight: 900, fontSize: "24px" }}>🥇</span>;
   if (r === 1) return <span style={{ fontWeight: 800, fontSize: "22px" }}>🥈</span>;
   return null;
 };
