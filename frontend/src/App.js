@@ -42,20 +42,15 @@ function numVal(v) {
 function pad2(n){ return String(n).padStart(2, "0"); }
 
 // === Countdown helpers ===
-function getThisMondayNoon(d = new Date()) {
-  const day = d.getDay();               // 0=Sun,1=Mon
-  const diffToMonday = (day + 6) % 7;   // days since Monday
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - diffToMonday);
-  monday.setHours(12, 0, 0, 0);         // 12:00 local
-  return monday;
+// === Monthly Reset (GMT/UTC): 00:00:00 on the 1st of the next month ===
+function getNextMonthResetTarget(now = new Date()) {
+  // Use UTC so it's always GMT (no DST drift)
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth(); // 0-11
+  // first of NEXT month 00:00:00 UTC
+  return new Date(Date.UTC(y, m + 1, 1, 0, 0, 0));
 }
-function getNextResetTarget(now = new Date()) {
-  const thisMondayNoon = getThisMondayNoon(now);
-  if (now < thisMondayNoon) return thisMondayNoon; // this week's Monday 12:00
-  const next = new Date(thisMondayNoon);
-  next.setDate(thisMondayNoon.getDate() + 7);      // next Monday 12:00
-  return next;
+
 }
 function diffToDHMS(target, now = new Date()) {
   let ms = Math.max(0, target - now);
@@ -241,16 +236,16 @@ function buildRankMap(rows) {
   return m;
 }
 
-// ✅ Top-2 only: highlight + strips; 3–20 identical
+// Top-2 only: highlight + strips; 3–20 identical
 const rowStyleForRank = (r) => {
-  if (r === 0) return { background: "rgba(212,175,55,0.18)" };  // gold (transparent)
-  if (r === 1) return { background: "rgba(176,183,195,0.14)" }; // silver (transparent)
+  if (r === 0) return { background: "rgba(212,175,55,0.12)" };  // gold (transparent)
+  if (r === 1) return { background: "rgba(176,183,195,0.10)" }; // silver (transparent)
   return {};
 };
 const rowHeightForRank = (r) => (r <= 1 ? 45 : 42);
 const accentForRank = (r) => {
-  if (r === 0) return "rgba(212,175,55,0.95)";
-  if (r === 1) return "rgba(176,183,195,0.95)";
+  if (r === 0) return "rgba(212,175,55,0.80)";
+  if (r === 1) return "rgba(176,183,195,0.75)";
   return "transparent"; // no strip for 3–20
 };
 const rankBadge = (r) => {
@@ -294,10 +289,14 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
             : 0;
 
         const arrow =
-          (typeof prev !== "number" || typeof globalRank !== "number") ? null :
-          moved > 0 ? <span style={{ color: "#3adf74", fontSize: 12, marginRight: 6 }}>▲</span> :
-          moved < 0 ? <span style={{ color: "#ff5a52", fontSize: 12, marginRight: 6 }}>▼</span> :
-          <span style={{ width: 14, display: "inline-block" }} />;
+          (typeof prev !== "number" || typeof globalRank !== "number")
+            ? <span style={{ width: 14, display: "inline-block" }} />
+            : moved > 0
+              ? <span style={{ color: "#3adf74", fontSize: 12, lineHeight: 1 }}>▲</span>
+              : moved < 0
+                ? <span style={{ color: "#ff5a52", fontSize: 12, lineHeight: 1 }}>▼</span>
+                : <span style={{ width: 14, display: "inline-block" }} />;
+
 
         const n = numVal(row.pct_change);
         const pctColor =
@@ -406,7 +405,8 @@ export default function App() {
   const [data, setData] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [target, setTarget] = useState(getNextResetTarget());
+  const [target, setTarget] = useState(getNextMonthResetTarget());
+
   const [tleft, setTleft] = useState(diffToDHMS(target));
 
   // ✅ NEW: previous ranks for movement arrows (from localStorage)
@@ -479,6 +479,15 @@ export default function App() {
         throw new Error("Missing REACT_APP_SUPABASE_URL or REACT_APP_SUPABASE_ANON_KEY");
       }
 
+      // read PREVIOUS map first (before we overwrite it)
+      let prevMap = {};
+      try {
+        prevMap = JSON.parse(localStorage.getItem(LS_RANK_KEY) || "{}");
+      } catch {
+        prevMap = {};
+      }
+      setPrevRankById(prevMap);
+
       const res = await fetch(SB_ACTIVE_URL, {
         headers: {
           apikey: SUPABASE_ANON,
@@ -512,21 +521,9 @@ export default function App() {
 
       const nextData = Array.isArray(rows) ? rows.map(norm) : [];
 
-      // movement arrows need PREVIOUS ranks (not current)
-      let prevMap = {};
-      try {
-        prevMap = JSON.parse(localStorage.getItem(LS_RANK_KEY) || "{}");
-      } catch {
-        prevMap = {};
-      }
-
-      // show arrows using the LAST saved ranks
-      setPrevRankById(prevMap);
-
-      // then save CURRENT ranks for the next refresh
+      // write NEW map for next refresh (don’t use it for arrows now)
       const nextRankMap = buildRankMap(nextData);
       try { localStorage.setItem(LS_RANK_KEY, JSON.stringify(nextRankMap)); } catch {}
-
 
       setOriginalData(nextData);
       setData(nextData);
@@ -536,6 +533,7 @@ export default function App() {
       setData([]);
     }
   }
+
 
   useEffect(() => { loadData(); }, []);
 
@@ -560,7 +558,7 @@ export default function App() {
     const id = setInterval(() => {
       const now = new Date();
       if (now >= target) {
-        const nextT = getNextResetTarget(now);
+        const nextT = getNextMonthResetTarget(now);
         setTarget(nextT);
         setTleft(diffToDHMS(nextT, now));
       } else {
@@ -593,7 +591,7 @@ export default function App() {
   const top30Data = useMemo(() => originalData.slice(0, 30), [originalData]);
   const rowsToRender = useMemo(() => (searchQuery ? data : top30Data), [searchQuery, data, top30Data]);
 
-  const centerWrap = { maxWidth: 1300, margin: "0 auto" };
+  const centerWrap = { maxWidth: 1180, margin: "0 auto" };
   const gradientTheadStyle = {
     background: "linear-gradient(135deg, #0f0f0f 0%, #222 60%, #d4af37 100%)",
     color: "#fff"
@@ -607,16 +605,16 @@ export default function App() {
     boxShadow: "0 2px 0 rgba(0,0,0,0.4)"
   };
 
-  // ✅ Prizes show ranks 1..20
+  // Prizes show ranks 1..20
   const visibleForPrizes = top30Data.slice(0, 20);
 
   // Live tz label (recomputed each render thanks to the ticking countdown)
   const londonTZ = getLondonTZAbbrev();
 
-  // ✅ desktop column sizing (rank tighter, name wider, net% prominent, flag fixed)
-  const COL_RANK_W = 90;
-  const COL_NET_W  = 160;
-  const COL_FLAG_W = 110;
+  // desktop column sizing (rank tighter, name wider, net% prominent, flag fixed)
+  const COL_RANK_W = 80;
+  const COL_NET_W  = 140;
+  const COL_FLAG_W = 90;
 
   return (
     <div
@@ -868,10 +866,14 @@ export default function App() {
                         : 0;
 
                     const arrow =
-                      (typeof prev !== "number" || typeof globalRank !== "number") ? null :
-                      moved > 0 ? <span style={{ color: "#3adf74", fontSize: 12, marginRight: 6 }}>▲</span> :
-                      moved < 0 ? <span style={{ color: "#ff5a52", fontSize: 12, marginRight: 6 }}>▼</span> :
-                      <span style={{ width: 14, display: "inline-block" }} />;
+                      (typeof prev !== "number" || typeof globalRank !== "number")
+                        ? <span style={{ width: 14, display: "inline-block" }} />
+                        : moved > 0
+                          ? <span style={{ color: "#3adf74", fontSize: 12, lineHeight: 1 }}>▲</span>
+                          : moved < 0
+                            ? <span style={{ color: "#ff5a52", fontSize: 12, lineHeight: 1 }}>▼</span>
+                            : <span style={{ width: 14, display: "inline-block" }} />;
+
 
                     const zebra = { background: rowIndex % 2 === 0 ? "#121212" : "#0f0f0f" };
                     const highlight = rowStyleForRank(globalRank);
@@ -904,11 +906,24 @@ export default function App() {
                           borderLeft: globalRank <= 1 ? `8px solid ${leftAccent}` : "8px solid transparent",
                           textAlign: "center"
                         }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                        <span
+                          style={{
+                            display: "inline-grid",
+                            gridTemplateColumns: "16px 28px",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            columnGap: 6,
+                            minWidth: 52,
+                          }}
+                        >
+                          <span style={{ width: 16, display: "inline-flex", justifyContent: "center" }}>
                             {arrow}
+                          </span>
+                          <span style={{ width: 28, textAlign: "left" }}>
                             {rankBadge(globalRank) || displayRank}
                           </span>
-                        </td>
+                        </span>
+                      </td>>
 
                         {/* NAME: center for screenshot look */}
                         <td style={{ ...cellBase, textAlign: "center" }}>
@@ -977,7 +992,7 @@ export default function App() {
               </tr>
               <tr>
                 <td colSpan={4} style={{ padding: "8px 6px", textAlign: "center", color: "#aaa", fontSize: 12 }}>
-                  NEXT RESET: MONDAY 12:00 PM {londonTZ}
+                  NEXT RESET: COMING 1ST @ 00:00 {londonTZ}
                 </td>
               </tr>
             </tbody>
