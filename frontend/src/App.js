@@ -10,14 +10,14 @@ countries.registerLocale(enLocale);
 const SUPABASE_URL  = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
-// ✅ demo table + no balance needed for UI
+// demo table + no balance needed for UI
 const SB_SELECT =
   "account_id,customer_name,country,plan,equity,open_pnl,pct_change,updated_at";
 
-// ✅ fetch from demo live table (sorted by pct_change desc)
+// fetch from demo live table (sorted by pct_change desc)
 const SB_ACTIVE_URL = `${SUPABASE_URL}/rest/v1/e2t_demo_live?select=${encodeURIComponent(
   SB_SELECT
-)}&order=pct_change.desc.nullslast&limit=5000`;
+)}&order=pct_change.desc.nullslast&limit=500`;
 
 // NOTE: We no longer render API_BASE anywhere (you asked to hide it)
 const API_BASE = process.env.REACT_APP_API_BASE || "";
@@ -512,10 +512,21 @@ export default function App() {
 
       const nextData = Array.isArray(rows) ? rows.map(norm) : [];
 
-      // ✅ store rank map for next refresh arrows
+      // movement arrows need PREVIOUS ranks (not current)
+      let prevMap = {};
+      try {
+        prevMap = JSON.parse(localStorage.getItem(LS_RANK_KEY) || "{}");
+      } catch {
+        prevMap = {};
+      }
+
+      // show arrows using the LAST saved ranks
+      setPrevRankById(prevMap);
+
+      // then save CURRENT ranks for the next refresh
       const nextRankMap = buildRankMap(nextData);
       try { localStorage.setItem(LS_RANK_KEY, JSON.stringify(nextRankMap)); } catch {}
-      setPrevRankById(nextRankMap);
+
 
       setOriginalData(nextData);
       setData(nextData);
@@ -687,55 +698,83 @@ export default function App() {
               </tr>
             </thead>
             <tbody>
-              {visibleForPrizes.length === 0 && (
+              {top30Data.length === 0 ? (
                 <tr><td colSpan={2} style={{ padding: 10, color: "#999" }}>No data</td></tr>
-              )}
-              {visibleForPrizes.map((row, idx) => {
-                const globalRank = idx;           // 0-based
-                const rank1 = globalRank + 1;     // 1-based
-
-                const zebra = { background: idx % 2 === 0 ? "#121212" : "#0f0f0f" };
-                const highlight = rowStyleForRank(globalRank);
-                const rowStyle = { ...zebra, ...highlight };
-
-                const rh = rowHeightForRank(globalRank);
-
-                // ✅ 1 & 2 slightly larger; 3–20 identical
-                let fs = "13px", fw = 500;
-                if (globalRank === 0) { fs = "15px"; fw = 800; }
-                else if (globalRank === 1) { fs = "14px"; fw = 700; }
-
-                const prize = prizeLabel(rank1);
-
-                return (
-                  <tr key={idx} style={rowStyle}>
+              ) : (
+                <>
+                  {/* Rank 1 */}
+                  <tr style={{ background: "rgba(212,175,55,0.18)" }}>
                     <td style={{
-                      height: rh,
-                      lineHeight: rh + "px",
-                      padding: 0,
-                      paddingLeft: 8,
+                      height: 45, lineHeight: "45px",
+                      padding: 0, paddingLeft: 8,
                       fontWeight: 800,
-                      borderLeft: globalRank <= 1 ? `6px solid ${accentForRank(globalRank)}` : "6px solid transparent"
+                      borderLeft: "6px solid rgba(212,175,55,0.95)"
                     }}>
-                      {rankBadge(globalRank) || rank1}
+                      🥇 1
                     </td>
                     <td style={{
-                      height: rh,
-                      lineHeight: rh + "px",
-                      padding: 0,
-                      paddingRight: 12,
-                      fontSize: fs,
-                      fontWeight: fw,
+                      height: 45, lineHeight: "45px",
+                      padding: 0, paddingRight: 12,
+                      fontSize: "15px",
+                      fontWeight: 800,
                       textAlign: "right",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis"
                     }}>
-                      {prize}
+                      {isMobile ? PRIZE_TOP_MOBILE[1] : PRIZE_TOP_DESKTOP[1]}
                     </td>
                   </tr>
-                );
-              })}
+
+                  {/* Rank 2 */}
+                  <tr style={{ background: "rgba(176,183,195,0.14)" }}>
+                    <td style={{
+                      height: 45, lineHeight: "45px",
+                      padding: 0, paddingLeft: 8,
+                      fontWeight: 800,
+                      borderLeft: "6px solid rgba(176,183,195,0.95)"
+                    }}>
+                      🥈 2
+                    </td>
+                    <td style={{
+                      height: 45, lineHeight: "45px",
+                      padding: 0, paddingRight: 12,
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      textAlign: "right",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis"
+                    }}>
+                      {isMobile ? PRIZE_TOP_MOBILE[2] : PRIZE_TOP_DESKTOP[2]}
+                    </td>
+                  </tr>
+
+                  {/* Rank 3–20 */}
+                  <tr style={{ background: "#121212" }}>
+                    <td style={{
+                      height: 42, lineHeight: "42px",
+                      padding: 0, paddingLeft: 8,
+                      fontWeight: 800,
+                      borderLeft: "6px solid transparent"
+                    }}>
+                      3–20
+                    </td>
+                    <td style={{
+                      height: 42, lineHeight: "42px",
+                      padding: 0, paddingRight: 12,
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      textAlign: "right",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis"
+                    }}>
+                      {isMobile ? PRIZE_3_TO_20_MOBILE : PRIZE_3_TO_20_DESKTOP}
+                    </td>
+                  </tr>
+                </>
+              )}
             </tbody>
           </table>
         </div>
@@ -871,8 +910,8 @@ export default function App() {
                           </span>
                         </td>
 
-                        {/* NAME: left aligned for screenshot look */}
-                        <td style={{ ...cellBase, textAlign: "left", paddingLeft: 10 }}>
+                        {/* NAME: center for screenshot look */}
+                        <td style={{ ...cellBase, textAlign: "center" }}>
                           {shortName(row["customer_name"])}
                         </td>
 
