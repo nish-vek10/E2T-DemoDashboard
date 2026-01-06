@@ -51,7 +51,6 @@ function getNextMonthResetTarget(now = new Date()) {
   return new Date(Date.UTC(y, m + 1, 1, 0, 0, 0));
 }
 
-}
 function diffToDHMS(target, now = new Date()) {
   let ms = Math.max(0, target - now);
   const totalSec = Math.floor(ms / 1000);
