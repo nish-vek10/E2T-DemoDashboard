@@ -409,39 +409,49 @@ def norm_account_id(v: Any) -> Optional[str]:
 
 def run_update() -> None:
     """
-    Simple loop:
-    - Load CRM list from lv_tpaccount
-    - For each account_id (lv_name):
-        - fetch Sirix
-        - equity logic:
-            * if equity > 0 -> use it
-            * else if zero_balance_amount exists -> use abs(amount)
-            * else -> equity=None
-        - pct_change = (equity - START_EQUITY)/START_EQUITY * 100
-    - Upsert into e2t_demo_live
+    Demo update with progress logs.
+    - Loads CRM list
+    - Fetches Sirix for each account
+    - Upserts into e2t_demo_live
     """
-    print("[UPDATE] Running demo update…")
+    cycle_started = now_utc()
+    print("\n" + "=" * 70)
+    print(f"[CYCLE] START {cycle_started.isoformat()}  |  START_EQUITY={START_EQUITY}  |  RATE_DELAY_SEC={RATE_DELAY_SEC}")
+    print("=" * 70)
+
     df = load_crm_filtered_df()
     total = len(df)
     if total == 0:
-        print("[UPDATE] No CRM rows to process.")
+        print("[CYCLE] No CRM rows to process. (table empty or filtered)")
         return
+
+    processed = 0
+    skipped = 0
+    sirix_missing = 0
+    upsert_ok = 0
+    errors = 0
 
     start_ts = time.time()
 
+    # heartbeat every N rows (so logs show activity on big datasets)
+    HEARTBEAT_EVERY = 50
+
     for i, row in df.iterrows():
-
         raw_id = row.get(CRM_COL_ACCOUNT_ID)
-
         aid = norm_account_id(raw_id)
+
         if not aid:
-            print(f"[SKIP] Invalid account id: {raw_id}")
+            skipped += 1
+            if skipped <= 5:
+                print(f"[SKIP] Invalid account id: raw={raw_id!r}")
             continue
 
         cname = row.get(CRM_COL_CUSTOMER)
         tname = row.get(CRM_COL_TEMP_NAME)
 
-        print(f"[{i+1}/{total}] Fetching UserID: {raw_id} -> norm={aid} ...")
+        # short progress line
+        print(f"[{i+1}/{total}] Fetch Sirix | UserID raw={raw_id} norm={aid} | name={str(cname)[:24]!r}")
+
         sirix = fetch_sirix_data(aid)
 
         equity = None
@@ -456,7 +466,6 @@ def run_update() -> None:
             eq = sirix.get("Equity")
             zb = sirix.get("ZeroBalanceAmount")
 
-            # Prefer live equity if it's positive
             try:
                 eq_val = float(eq) if eq is not None else None
             except Exception:
@@ -465,19 +474,34 @@ def run_update() -> None:
             if eq_val is not None and eq_val > 0:
                 equity = eq_val
                 source = "equity"
-            elif zb is not None and zb > 0:
-                equity = float(zb)
-                source = "zero_balance_txn"
+            elif zb is not None:
+                try:
+                    zb_val = float(zb)
+                except Exception:
+                    zb_val = None
+                if zb_val is not None and zb_val > 0:
+                    equity = zb_val
+                    source = "zero_balance_txn"
+        else:
+            sirix_missing += 1
 
         pct_change = None
         if equity is not None and START_EQUITY > 0:
             pct_change = ((equity - START_EQUITY) / START_EQUITY) * 100.0
 
+        # Print a quick “value line” so you can visually confirm it works
+        # (limit spam: only first 10 rows OR every heartbeat)
+        if (processed < 10) or ((processed + 1) % HEARTBEAT_EVERY == 0):
+            print(
+                f"[DATA] id={aid} equity={equity} open_pnl={open_pnl} "
+                f"pct={pct_change if pct_change is not None else None} source={source} group={group_name}"
+            )
+
         payload = {
             "account_id": aid,
             "customer_name": cname,
             "temp_name": tname,
-            "plan": START_EQUITY,         # always 50k
+            "plan": START_EQUITY,
             "equity": equity,
             "open_pnl": open_pnl,
             "pct_change": pct_change,
@@ -486,14 +510,31 @@ def run_update() -> None:
             "updated_at": now_iso_utc(),
         }
 
-        upsert_row(TABLE_LIVE, payload, on_conflict="account_id")
+        try:
+            upsert_row(TABLE_LIVE, payload, on_conflict="account_id")
+            upsert_ok += 1
+        except Exception as e:
+            errors += 1
+            # don’t kill whole cycle; keep going
+            print(f"[ERROR] Upsert failed for id={aid}: {e}")
+
+        processed += 1
 
         if RATE_DELAY_SEC > 0:
             time.sleep(RATE_DELAY_SEC)
 
+        # heartbeat line
+        if processed % HEARTBEAT_EVERY == 0:
+            elapsed = int(time.time() - start_ts)
+            mm, ss = divmod(elapsed, 60)
+            print(f"[HEARTBEAT] processed={processed}/{total} skipped={skipped} sirix_missing={sirix_missing} errors={errors} elapsed={mm:02d}:{ss:02d}")
+
     elapsed = int(time.time() - start_ts)
     mm, ss = divmod(elapsed, 60)
-    print(f"[UPDATE] Complete. Processed={total} runtime={mm:02d}:{ss:02d}")
+    print("-" * 70)
+    print(f"[CYCLE] DONE processed={processed} skipped={skipped} sirix_missing={sirix_missing} upsert_ok={upsert_ok} errors={errors} runtime={mm:02d}:{ss:02d}")
+    print("-" * 70)
+
     trigger_netlify_build("demo update")
 
 
