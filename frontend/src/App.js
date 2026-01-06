@@ -390,7 +390,7 @@ export default function App() {
 
   const [tleft, setTleft] = useState(diffToDHMS(target));
 
-  // ✅ NEW: previous ranks for movement arrows (from localStorage)
+  // NEW: previous ranks for movement arrows (from localStorage)
   const [prevRankById, setPrevRankById] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(LS_RANK_KEY) || "{}");
@@ -450,7 +450,7 @@ export default function App() {
   const prizeLabel = (rank1based) => {
     if (rank1based === 1) return isMobile ? PRIZE_TOP_MOBILE[1] : PRIZE_TOP_DESKTOP[1];
     if (rank1based === 2) return isMobile ? PRIZE_TOP_MOBILE[2] : PRIZE_TOP_DESKTOP[2];
-    if (rank1based >= 3 && rank1based <= 20) return isMobile ? PRIZE_3_TO_20_MOBILE : PRIZE_3_TO_20_DESKTOP;
+    if (rank1based >= 3 && rank1based <= 22) return isMobile ? PRIZE_3_TO_20_MOBILE : PRIZE_3_TO_20_DESKTOP;
     return "";
   };
 
@@ -682,12 +682,12 @@ export default function App() {
               ) : (
                 <>
                   {/* Rank 1 */}
-                  <tr style={{ background: "rgba(212,175,55,0.18)" }}>
+                  <tr style={{ background: "#1a1505" }}>
                     <td style={{
                       height: 45, lineHeight: "45px",
                       padding: 0, paddingLeft: 8,
                       fontWeight: 800,
-                      borderLeft: "6px solid rgba(212,175,55,0.95)"
+                      borderLeft: "6px solid #F4C430"
                     }}>
                       🥇 1
                     </td>
@@ -706,12 +706,12 @@ export default function App() {
                   </tr>
 
                   {/* Rank 2 */}
-                  <tr style={{ background: "rgba(176,183,195,0.14)" }}>
+                  <tr style={{ background: "#0f1420" }}>
                     <td style={{
                       height: 45, lineHeight: "45px",
                       padding: 0, paddingLeft: 8,
                       fontWeight: 800,
-                      borderLeft: "6px solid rgba(176,183,195,0.95)"
+                      borderLeft: "6px solid #B0B7C3"
                     }}>
                       🥈 2
                     </td>
@@ -729,7 +729,7 @@ export default function App() {
                     </td>
                   </tr>
 
-                  {/* Rank 3–20 */}
+                  {/* Rank 3–22 */}
                   <tr style={{ background: "#121212" }}>
                     <td style={{
                       height: 42, lineHeight: "42px",
@@ -737,7 +737,7 @@ export default function App() {
                       fontWeight: 800,
                       borderLeft: "6px solid transparent"
                     }}>
-                      3–20
+                      3–22
                     </td>
                     <td style={{
                       height: 42, lineHeight: "42px",
@@ -750,6 +750,13 @@ export default function App() {
                       textOverflow: "ellipsis"
                     }}>
                       {isMobile ? PRIZE_3_TO_20_MOBILE : PRIZE_3_TO_20_DESKTOP}
+                    </td>
+                  </tr>
+
+                  {/* Gold separator line */}
+                  <tr>
+                    <td colSpan={2} style={{ padding: 0 }}>
+                      <div style={{ height: 2, background: "#F4C430" }} />
                     </td>
                   </tr>
                 </>
