@@ -10,12 +10,14 @@ countries.registerLocale(enLocale);
 const SUPABASE_URL  = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
+// ✅ demo table + no balance needed for UI
 const SB_SELECT =
-  "account_id,customer_name,country,plan,balance,equity,open_pnl,pct_change,updated_at";
+  "account_id,customer_name,country,plan,equity,open_pnl,pct_change,updated_at";
 
-const SB_ACTIVE_URL = `${SUPABASE_URL}/rest/v1/e2t_active?select=${encodeURIComponent(
+// ✅ fetch from demo live table (sorted by pct_change desc)
+const SB_ACTIVE_URL = `${SUPABASE_URL}/rest/v1/e2t_demo_live?select=${encodeURIComponent(
   SB_SELECT
-)}&order=pct_change.desc.nullslast&limit=500`;
+)}&order=pct_change.desc.nullslast&limit=5000`;
 
 // NOTE: We no longer render API_BASE anywhere (you asked to hide it)
 const API_BASE = process.env.REACT_APP_API_BASE || "";
@@ -82,7 +84,6 @@ function getLondonTZAbbrev(d = new Date()) {
   }
 }
 
-// flags
 // --- Flag helpers (robust country-name → ISO alpha-2) ---
 const COUNTRY_ALIASES = {
   "uk": "United Kingdom",
@@ -149,24 +150,20 @@ const COUNTRY_ALIASES = {
 function resolveCountryAlpha2(rawName) {
   if (!rawName) return null;
 
-  // 1) Basic trim first
   let raw = String(rawName).trim();
   if (!raw) return null;
 
-  // 2) Try direct library lookup first (exact string)
   let code = countries.getAlpha2Code(raw, "en");
 
-  // 3) Prepare multiple normalized forms for alias lookup
   const rawLower = raw.toLowerCase();
   const cleanedLower = rawLower.replace(/[().]/g, "").replace(/\s+/g, " ").trim();
   const fullyNormalized = rawLower
-    .normalize("NFKD")              // decompose accents
-    .replace(/[\u0300-\u036f]/g, "")// strip diacritics
-    .replace(/[().]/g, "")          // remove punctuation we don't care about
-    .replace(/\s+/g, " ")           // collapse all whitespace, incl. NBSP
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[().]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 
-  // 4) Alias lookup across all normalized forms
   if (!code) {
     const alias =
       COUNTRY_ALIASES[rawLower] ??
@@ -174,25 +171,20 @@ function resolveCountryAlpha2(rawName) {
       COUNTRY_ALIASES[fullyNormalized];
 
     if (alias) {
-      // If the alias is a 2-letter alpha-2 code (e.g., "tz"), return it directly
       if (/^[A-Za-z]{2}$/.test(alias)) {
         return alias.toLowerCase();
       }
-      // Otherwise, treat alias as a country name and ask the library for it
       code = countries.getAlpha2Code(alias, "en") || (alias.toLowerCase() === "kosovo" ? "XK" : null);
     }
   }
 
-  // 5) Library retry with our cleaned names (sometimes helps)
   if (!code) {
     code =
       countries.getAlpha2Code(cleanedLower, "en") ||
       countries.getAlpha2Code(fullyNormalized, "en");
   }
 
-  // 6) Last-resort targeted fallbacks (very narrow)
   if (!code) {
-    // If the string clearly contains 'tanzania', force TZ
     if (fullyNormalized.includes("tanzania")) return "tz";
   }
 
@@ -216,7 +208,6 @@ function getFlagOnly(countryName) {
         boxShadow: "0 0 3px rgba(0,0,0,0.6)"
       }}
       onError={(e) => {
-        // Graceful fallback if some edge-case 404s
         e.currentTarget.style.display = "none";
         e.currentTarget.insertAdjacentText("afterend", countryName || "");
       }}
@@ -235,29 +226,36 @@ function shortName(full) {
   return lastInitial ? `${first} ${lastInitial}` : first;
 }
 
-// Top-3 row styles (dark tints)
+/**
+ * ✅ NEW: rank movement storage (last refresh order)
+ * - we store a map: { [account_id]: 0-based rank }
+ * - movement: prev - current (positive => moved up)
+ */
+const LS_RANK_KEY = "e2t_prev_rank_by_id";
+function buildRankMap(rows) {
+  const m = Object.create(null);
+  for (let i = 0; i < rows.length; i++) {
+    const id = String(rows[i]?.account_id ?? "");
+    if (id) m[id] = i;
+  }
+  return m;
+}
+
+// ✅ Top-2 only: highlight + strips; 3–20 identical
 const rowStyleForRank = (r) => {
-  if (r === 0) return { background: "#1a1505" }; // gold tint
-  if (r === 1) return { background: "#0f1420" }; // silver/blue tint
-  if (r === 2) return { background: "#0f1a12" }; // bronze/green tint
+  if (r === 0) return { background: "rgba(212,175,55,0.18)" };  // gold (transparent)
+  if (r === 1) return { background: "rgba(176,183,195,0.14)" }; // silver (transparent)
   return {};
 };
-const rowHeightForRank = (r) => {
-  if (r === 0) return 45;
-  if (r === 1) return 43;
-  if (r === 2) return 41;
-  return 42;
-};
+const rowHeightForRank = (r) => (r <= 1 ? 45 : 42);
 const accentForRank = (r) => {
-  if (r === 0) return "#F4C430";
-  if (r === 1) return "#B0B7C3";
-  if (r === 2) return "#CD7F32";
-  return "transparent";
+  if (r === 0) return "rgba(212,175,55,0.95)";
+  if (r === 1) return "rgba(176,183,195,0.95)";
+  return "transparent"; // no strip for 3–20
 };
 const rankBadge = (r) => {
   if (r === 0) return <span style={{ fontWeight: 800, fontSize: "22px" }}>🥇</span>;
   if (r === 1) return <span style={{ fontWeight: 800, fontSize: "22px" }}>🥈</span>;
-  if (r === 2) return <span style={{ fontWeight: 800, fontSize: "22px" }}>🥉</span>;
   return null;
 };
 
@@ -277,7 +275,7 @@ function msUntilNextEvenHour30(now = new Date()) {
 }
 
 // ===== Mobile Leaderboard Cards (phone-only UI) =====
-function MobileLeaderboardCards({ rows, rowsTop30, globalRankById }) {
+function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById }) {
   const list = rows && rows.length ? rows : rowsTop30;
 
   return (
@@ -288,18 +286,29 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById }) {
         const displayRank =
           globalRank >= 0 && Number.isInteger(globalRank) ? globalRank + 1 : "";
 
+        // movement arrow (▲/▼)
+        const prev = prevRankById?.[id];
+        const moved =
+          (typeof prev === "number" && typeof globalRank === "number")
+            ? (prev - globalRank)
+            : 0;
+
+        const arrow =
+          (typeof prev !== "number" || typeof globalRank !== "number") ? null :
+          moved > 0 ? <span style={{ color: "#3adf74", fontSize: 12, marginRight: 6 }}>▲</span> :
+          moved < 0 ? <span style={{ color: "#ff5a52", fontSize: 12, marginRight: 6 }}>▼</span> :
+          <span style={{ width: 14, display: "inline-block" }} />;
+
         const n = numVal(row.pct_change);
         const pctColor =
           n == null ? "#eaeaea" : n > 0 ? "#34c759" : n < 0 ? "#ff453a" : "#eaeaea";
 
-        /* top-3 subtle highlight */
+        // top-2 subtle highlight (keep modern + readable)
         const bg =
           globalRank === 0
-            ? "linear-gradient(135deg,#1a1505 0%,#161616 100%)"
+            ? "linear-gradient(135deg, rgba(212,175,55,0.22) 0%, #161616 100%)"
             : globalRank === 1
-            ? "linear-gradient(135deg,#0f1420 0%,#161616 100%)"
-            : globalRank === 2
-            ? "linear-gradient(135deg,#0f1a12 0%,#161616 100%)"
+            ? "linear-gradient(135deg, rgba(176,183,195,0.18) 0%, #161616 100%)"
             : "#181818";
 
         return (
@@ -319,20 +328,23 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div
                 style={{
-                  minWidth: 32,
+                  minWidth: 38,
                   height: 32,
                   borderRadius: 8,
                   background: "#101010",
                   border:
-                    globalRank <= 2 ? "1px solid rgba(212,175,55,0.35)" : "1px solid #222",
+                    globalRank <= 1 ? "1px solid rgba(212,175,55,0.25)" : "1px solid #222",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   fontWeight: 800,
-                  color: globalRank <= 2 ? "#d4af37" : "#eaeaea",
+                  color: globalRank <= 1 ? "#d4af37" : "#eaeaea",
+                  padding: "0 6px",
+                  gap: 4
                 }}
                 aria-label={`Rank ${displayRank}`}
               >
+                {arrow}
                 {rankBadge(globalRank) || displayRank}
               </div>
 
@@ -354,7 +366,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById }) {
               <div>{getFlagOnly(row.country)}</div>
             </div>
 
-            {/* Row 2: Net % + Capital */}
+            {/* Row 2: Net % only (capital removed) */}
             <div
               style={{
                 display: "grid",
@@ -363,27 +375,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById }) {
                 gap: 10,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  fontSize: 12.5,
-                }}
-              >
-                <span
-                  style={{
-                    background: "#101010",
-                    border: "1px solid #2a2a2a",
-                    borderRadius: 8,
-                    padding: "4px 8px",
-                  }}
-                >
-                  <span style={{ opacity: 0.65, marginRight: 6 }}>Capital</span>
-                  <strong style={{ color: "#eaeaea" }}>{fmtNumber(row.plan, 0)}</strong>
-                </span>
-              </div>
+              <div /> {/* spacer to keep layout balanced */}
 
               <span
                 style={{
@@ -409,7 +401,6 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById }) {
   );
 }
 
-
 export default function App() {
   const [originalData, setOriginalData] = useState([]);
   const [data, setData] = useState([]);
@@ -418,109 +409,121 @@ export default function App() {
   const [target, setTarget] = useState(getNextResetTarget());
   const [tleft, setTleft] = useState(diffToDHMS(target));
 
-    // Measure the real header height so the sticky strip matches exactly
-    const theadRef = useRef(null);
-    const [headerH, setHeaderH] = useState(46);
+  // ✅ NEW: previous ranks for movement arrows (from localStorage)
+  const [prevRankById, setPrevRankById] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(LS_RANK_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  });
 
-    useLayoutEffect(() => {
-      function measure() {
-        if (theadRef.current) {
-          const h = Math.round(theadRef.current.getBoundingClientRect().height);
-          if (h > 0) setHeaderH(h);
-        }
+  // Measure the real header height so the sticky strip matches exactly
+  const theadRef = useRef(null);
+  const [headerH, setHeaderH] = useState(46);
+
+  useLayoutEffect(() => {
+    function measure() {
+      if (theadRef.current) {
+        const h = Math.round(theadRef.current.getBoundingClientRect().height);
+        if (h > 0) setHeaderH(h);
       }
-      measure();
-      window.addEventListener("resize", measure);
-      return () => window.removeEventListener("resize", measure);
-    }, []);
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
-    // Detect mobile viewport (<= 768px) to switch prize labels
-    const [isMobile, setIsMobile] = useState(() =>
+  // Detect mobile viewport (<= 768px) to switch prize labels
+  const [isMobile, setIsMobile] = useState(() =>
     typeof window !== "undefined"
-    ? window.matchMedia("(max-width: 768px)").matches
-    : false
-    );
-    useEffect(() => {
+      ? window.matchMedia("(max-width: 768px)").matches
+      : false
+  );
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 768px)");
     const onChange = (e) => setIsMobile(e.matches);
     mq.addEventListener?.("change", onChange);
     mq.addListener?.(onChange); // Safari fallback
     return () => {
-    mq.removeEventListener?.("change", onChange);
-    mq.removeListener?.(onChange);
+      mq.removeEventListener?.("change", onChange);
+      mq.removeListener?.(onChange);
     };
-    }, []);
+  }, []);
 
-    // Desktop: full amounts with commas
-    const PRIZES_DESKTOP = {
-      1: "$10,000 Funded Account",
-      2: "$5,000 Funded Account",
-      3: "$2,500 Funded Account",
-    };
+  // ✅ Prize labels (1,2 special; 3–20 same label)
+  const PRIZE_TOP_DESKTOP = {
+    1: "$10,000 Funded Account",
+    2: "$5,000 Funded Account",
+  };
+  const PRIZE_TOP_MOBILE = {
+    1: "$10K Account",
+    2: "$5K Account",
+  };
 
-    // Mobile: short K-form
-    const PRIZES_MOBILE = {
-      1: "$10K Account",
-      2: "$5K Account",
-      3: "$2.5K Account",
-    };
+  const PRIZE_3_TO_20_DESKTOP = "$2,500 Funded Account";
+  const PRIZE_3_TO_20_MOBILE  = "$2.5K Account";
 
-    // Use mobile map on phones, desktop map otherwise
-    const prizeMap = isMobile ? PRIZES_MOBILE : PRIZES_DESKTOP;
+  const prizeLabel = (rank1based) => {
+    if (rank1based === 1) return isMobile ? PRIZE_TOP_MOBILE[1] : PRIZE_TOP_DESKTOP[1];
+    if (rank1based === 2) return isMobile ? PRIZE_TOP_MOBILE[2] : PRIZE_TOP_DESKTOP[2];
+    if (rank1based >= 3 && rank1based <= 20) return isMobile ? PRIZE_3_TO_20_MOBILE : PRIZE_3_TO_20_DESKTOP;
+    return "";
+  };
 
-
-  async function loadData()
-  {
-      try
-      {
-        if (!SUPABASE_URL || !SUPABASE_ANON) {
-          throw new Error("Missing REACT_APP_SUPABASE_URL or REACT_APP_SUPABASE_ANON_KEY");
-        }
-
-        const res = await fetch(SB_ACTIVE_URL, {
-          headers: {
-            apikey: SUPABASE_ANON,
-            Authorization: `Bearer ${SUPABASE_ANON}`,
-          },
-        });
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(`HTTP ${res.status}: ${txt}`);
-        }
-
-        const rows = await res.json();
-
-        // Defensive client-side sort (NULLs last)
-        rows.sort((a, b) => {
-          const av = Number.isFinite(Number(a.pct_change)) ? Number(a.pct_change) : -Infinity;
-          const bv = Number.isFinite(Number(b.pct_change)) ? Number(b.pct_change) : -Infinity;
-          return bv - av;
-        });
-
-        const norm = (r) => ({
-          customer_name: r.customer_name ?? "",
-          account_id: r.account_id ?? "",
-          country: r.country ?? "",
-          plan: r.plan ?? null,
-          balance: r.balance ?? null,
-          equity: r.equity ?? null,
-          open_pnl: r.open_pnl ?? null,
-          pct_change: r.pct_change ?? null,
-          updated_at: r.updated_at ?? null,
-        });
-
-        const data = Array.isArray(rows) ? rows.map(norm) : [];
-        setOriginalData(data);
-        setData(data);
+  async function loadData() {
+    try {
+      if (!SUPABASE_URL || !SUPABASE_ANON) {
+        throw new Error("Missing REACT_APP_SUPABASE_URL or REACT_APP_SUPABASE_ANON_KEY");
       }
 
-      catch (e)
-      {
-        console.error("[loadData] error:", e);
-        setOriginalData([]);
-        setData([]);
+      const res = await fetch(SB_ACTIVE_URL, {
+        headers: {
+          apikey: SUPABASE_ANON,
+          Authorization: `Bearer ${SUPABASE_ANON}`,
+        },
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt}`);
       }
+
+      const rows = await res.json();
+
+      // Defensive client-side sort (NULLs last)
+      rows.sort((a, b) => {
+        const av = Number.isFinite(Number(a.pct_change)) ? Number(a.pct_change) : -Infinity;
+        const bv = Number.isFinite(Number(b.pct_change)) ? Number(b.pct_change) : -Infinity;
+        return bv - av;
+      });
+
+      const norm = (r) => ({
+        customer_name: r.customer_name ?? "",
+        account_id: r.account_id ?? "",
+        country: r.country ?? "",
+        plan: r.plan ?? null,
+        equity: r.equity ?? null,
+        open_pnl: r.open_pnl ?? null,
+        pct_change: r.pct_change ?? null,
+        updated_at: r.updated_at ?? null,
+      });
+
+      const nextData = Array.isArray(rows) ? rows.map(norm) : [];
+
+      // ✅ store rank map for next refresh arrows
+      const nextRankMap = buildRankMap(nextData);
+      try { localStorage.setItem(LS_RANK_KEY, JSON.stringify(nextRankMap)); } catch {}
+      setPrevRankById(nextRankMap);
+
+      setOriginalData(nextData);
+      setData(nextData);
+    } catch (e) {
+      console.error("[loadData] error:", e);
+      setOriginalData([]);
+      setData([]);
+    }
   }
 
   useEffect(() => { loadData(); }, []);
@@ -556,7 +559,7 @@ export default function App() {
     return () => clearInterval(id);
   }, [target]);
 
-  // build global rank index (by API account_id)
+  // build global rank index (by account_id)
   const globalRankById = useMemo(() => {
     const m = Object.create(null);
     for (let i = 0; i < originalData.length; i++) {
@@ -584,30 +587,32 @@ export default function App() {
     background: "linear-gradient(135deg, #0f0f0f 0%, #222 60%, #d4af37 100%)",
     color: "#fff"
   };
-  // Height of the header strip (matches <th> height)
-  // const LEADERBOARD_HEADER_H = 46; // px (tweak 44–48 if needed)
-
 
   // Sticky header cells for the leaderboard table
   const stickyThBase = {
     position: "sticky",
-    top: 0,             // sticks to the top of the scroll container
-    zIndex: 5,          // stay above table rows
-    // small shadow so the header doesn't visually merge with rows as you scroll
+    top: 0,
+    zIndex: 5,
     boxShadow: "0 2px 0 rgba(0,0,0,0.4)"
   };
 
-  const visibleForPrizes = top30Data.slice(0, 3);
+  // ✅ Prizes show ranks 1..20
+  const visibleForPrizes = top30Data.slice(0, 20);
 
   // Live tz label (recomputed each render thanks to the ticking countdown)
   const londonTZ = getLondonTZAbbrev();
+
+  // ✅ desktop column sizing (rank tighter, name wider, net% prominent, flag fixed)
+  const COL_RANK_W = 90;
+  const COL_NET_W  = 160;
+  const COL_FLAG_W = 110;
 
   return (
     <div
       style={{
         padding: "20px",
         fontFamily: "Switzer, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, 'Helvetica Neue', sans-serif",
-        background: "transparent",          // inherit global dark background
+        background: "transparent",
         color: "#eaeaea"
       }}
     >
@@ -670,12 +675,10 @@ export default function App() {
               color: "#eaeaea"
             }}
           >
-
-              {/* NEW: fix narrow first column so the text column gets more room */}
-              <colgroup>
-                <col style={{ width: 56 }} />  {/* rank/medal strip */}
-                <col />                        {/* amount takes the remaining width */}
-              </colgroup>
+            <colgroup>
+              <col style={{ width: 56 }} />
+              <col />
+            </colgroup>
 
             <thead style={gradientTheadStyle}>
               <tr>
@@ -688,17 +691,21 @@ export default function App() {
                 <tr><td colSpan={2} style={{ padding: 10, color: "#999" }}>No data</td></tr>
               )}
               {visibleForPrizes.map((row, idx) => {
-                const globalRank = idx;
+                const globalRank = idx;           // 0-based
+                const rank1 = globalRank + 1;     // 1-based
+
                 const zebra = { background: idx % 2 === 0 ? "#121212" : "#0f0f0f" };
                 const highlight = rowStyleForRank(globalRank);
                 const rowStyle = { ...zebra, ...highlight };
-                const prize = prizeMap[globalRank + 1] || "";
 
                 const rh = rowHeightForRank(globalRank);
+
+                // ✅ 1 & 2 slightly larger; 3–20 identical
                 let fs = "13px", fw = 500;
                 if (globalRank === 0) { fs = "15px"; fw = 800; }
                 else if (globalRank === 1) { fs = "14px"; fw = 700; }
-                else if (globalRank === 2) { fs = "13.5px"; fw = 600; }
+
+                const prize = prizeLabel(rank1);
 
                 return (
                   <tr key={idx} style={rowStyle}>
@@ -708,9 +715,9 @@ export default function App() {
                       padding: 0,
                       paddingLeft: 8,
                       fontWeight: 800,
-                      borderLeft: `6px solid ${accentForRank(globalRank)}`
+                      borderLeft: globalRank <= 1 ? `6px solid ${accentForRank(globalRank)}` : "6px solid transparent"
                     }}>
-                      {rankBadge(globalRank) || (globalRank + 1)}
+                      {rankBadge(globalRank) || rank1}
                     </td>
                     <td style={{
                       height: rh,
@@ -736,28 +743,27 @@ export default function App() {
         {/* LEADERBOARD */}
         <div className="col-leaderboard">
           <div className="desktopOnly" style={{ overflowX: "auto", maxHeight: "70vh", overflowY: "auto" }}>
-
             {/* STICKY GRADIENT STRIP (behind header text) */}
             <div
               style={{
-              position: "sticky",
-              top: 0,
-              height: headerH, // 46px from your constant
-              background: "linear-gradient(135deg, #0f0f0f 0%, #222 60%, #d4af37 100%)",
-              borderTopLeftRadius: 8,
-              borderTopRightRadius: 8,
-              zIndex: 4,
-              marginBottom: -(headerH - 1), // pull table up so <th> sits on this
-              pointerEvents: "none" // don't block scroll/hover
-          }}
-        />
+                position: "sticky",
+                top: 0,
+                height: headerH,
+                background: "linear-gradient(135deg, #0f0f0f 0%, #222 60%, #d4af37 100%)",
+                borderTopLeftRadius: 8,
+                borderTopRightRadius: 8,
+                zIndex: 4,
+                marginBottom: -(headerH - 1),
+                pointerEvents: "none"
+              }}
+            />
 
             <table
               cellPadding="5"
               style={{
                 width: "100%",
                 borderCollapse: "separate",
-                borderSpacing: 0,             // keeps visuals identical to "collapse"
+                borderSpacing: 0,
                 textAlign: "center",
                 fontFamily: "inherit",
                 fontSize: "14px",
@@ -770,30 +776,32 @@ export default function App() {
                 border: "none"
               }}
             >
+              {/* ✅ column sizing to match your screenshot */}
+              <colgroup>
+                <col style={{ width: COL_RANK_W }} />
+                <col /> {/* NAME gets remaining space */}
+                <col style={{ width: COL_NET_W }} />
+                <col style={{ width: COL_FLAG_W }} />
+              </colgroup>
 
               <thead ref={theadRef}>
                 <tr>
-                  {["RANK", "NAME", "NET %", "CAPITAL ($)", "COUNTRY"].map((label, idx, arr) => (
+                  {["RANK", "NAME", "NET %", "COUNTRY"].map((label, idx, arr) => (
                     <th
                       key={idx}
                       style={{
-                      ...stickyThBase,              // position: "sticky", top: 0, zIndex, shadow
-                      background: "transparent",     // let the table’s gradient show through
-                      color: "#fff",
-                      // typography
-                      fontWeight: 1000,
-                      fontSize: "16px",
-                      padding: "10px 6px",
-                      whiteSpace: "nowrap",
-
-                      // ensure there are no visible seams between cells
-                      border: "none",
-
-                      // rounded ends to match your other panels
-                      borderTopLeftRadius:  idx === 0 ? 8 : 0,
-                      borderTopRightRadius: idx === arr.length - 1 ? 8 : 0
-                    }}
-                  >
+                        ...stickyThBase,
+                        background: "transparent",
+                        color: "#fff",
+                        fontWeight: 1000,
+                        fontSize: "16px",
+                        padding: "10px 6px",
+                        whiteSpace: "nowrap",
+                        border: "none",
+                        borderTopLeftRadius:  idx === 0 ? 8 : 0,
+                        borderTopRightRadius: idx === arr.length - 1 ? 8 : 0
+                      }}
+                    >
                       {label}
                     </th>
                   ))}
@@ -803,7 +811,7 @@ export default function App() {
               <tbody>
                 {rowsToRender.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ padding: 20, color: "#999" }}>
+                    <td colSpan={4} style={{ padding: 20, color: "#999" }}>
                       No records found.
                     </td>
                   </tr>
@@ -813,41 +821,67 @@ export default function App() {
                     const globalRank = globalRankById[id];
                     const displayRank = (globalRank >= 0 && Number.isInteger(globalRank)) ? globalRank + 1 : "";
 
+                    // movement arrow (▲/▼)
+                    const prev = prevRankById?.[id];
+                    const moved =
+                      (typeof prev === "number" && typeof globalRank === "number")
+                        ? (prev - globalRank)
+                        : 0;
+
+                    const arrow =
+                      (typeof prev !== "number" || typeof globalRank !== "number") ? null :
+                      moved > 0 ? <span style={{ color: "#3adf74", fontSize: 12, marginRight: 6 }}>▲</span> :
+                      moved < 0 ? <span style={{ color: "#ff5a52", fontSize: 12, marginRight: 6 }}>▼</span> :
+                      <span style={{ width: 14, display: "inline-block" }} />;
+
                     const zebra = { background: rowIndex % 2 === 0 ? "#121212" : "#0f0f0f" };
                     const highlight = rowStyleForRank(globalRank);
                     const rowStyle = { ...zebra, ...highlight };
 
+                    // ✅ only 1 & 2 get bigger font; 3+ identical
                     let rowFontSize = "14px";
                     let rowFontWeight = 400;
                     if (globalRank === 0) { rowFontSize = "17px"; rowFontWeight = 800; }
                     else if (globalRank === 1) { rowFontSize = "16px"; rowFontWeight = 700; }
-                    else if (globalRank === 2) { rowFontSize = "15px"; rowFontWeight = 600; }
 
                     const leftAccent = accentForRank(globalRank);
 
                     const n = numVal(row["pct_change"]);
                     const pctColor = n == null ? "#eaeaea" : (n > 0 ? "#34c759" : (n < 0 ? "#ff453a" : "#eaeaea"));
+
+                    // ✅ keep net% prominent but not huge for 3+
                     let pctFont = rowFontSize;
                     if (globalRank === 0) pctFont = "calc(17px + 6px)";
                     else if (globalRank === 1) pctFont = "calc(16px + 4px)";
-                    else if (globalRank === 2) pctFont = "calc(15px + 2px)";
+                    else pctFont = "15px";
 
                     const cellBase = { whiteSpace: "nowrap", fontSize: rowFontSize, fontWeight: rowFontWeight };
 
                     return (
                       <tr key={id || rowIndex} style={rowStyle}>
-                        <td style={{ ...cellBase, fontWeight: 800, borderLeft: `8px solid ${leftAccent}` }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <td style={{
+                          ...cellBase,
+                          fontWeight: 800,
+                          borderLeft: globalRank <= 1 ? `8px solid ${leftAccent}` : "8px solid transparent",
+                          textAlign: "center"
+                        }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                            {arrow}
                             {rankBadge(globalRank) || displayRank}
                           </span>
                         </td>
-                        <td style={cellBase}>{shortName(row["customer_name"])}</td>
+
+                        {/* NAME: left aligned for screenshot look */}
+                        <td style={{ ...cellBase, textAlign: "left", paddingLeft: 10 }}>
+                          {shortName(row["customer_name"])}
+                        </td>
+
                         <td style={cellBase}>
                           <span style={{ color: pctColor, fontWeight: 800, fontSize: pctFont }}>
                             {fmtPct(n)}
                           </span>
                         </td>
-                        <td style={cellBase}>{fmtNumber(row["plan"], 0)}</td>
+
                         <td style={cellBase}>{getFlagOnly(row["country"])}</td>
                       </tr>
                     );
@@ -863,6 +897,7 @@ export default function App() {
               rows={searchQuery ? data : []}
               rowsTop30={top30Data}
               globalRankById={globalRankById}
+              prevRankById={prevRankById}
             />
           </div>
         </div>

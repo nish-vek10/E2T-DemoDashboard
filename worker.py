@@ -94,11 +94,8 @@ RATE_DELAY_SEC = float(os.environ.get("E2T_RATE_DELAY_SEC", "0.2"))
 E2T_TZ_LABEL = os.environ.get("E2T_TZ_LABEL", "UTC")
 
 # Destination tables
-TABLE_ACTIVE     = "e2t_active"
-TABLE_BLOWN      = "e2t_blown"
-TABLE_PURCHASES  = "e2t_purchases_api"
-TABLE_PLAN50K    = "e2t_plan50k"
-TABLE_BASELINE   = "e2t_baseline"
+TABLE_LIVE = "e2t_demo_live"
+START_EQUITY = float(os.environ.get("E2T_START_EQUITY", "50000"))
 
 # CRM column names (all lowercase in Supabase)
 CRM_COL_ACCOUNT_ID = "lv_name"
@@ -353,6 +350,17 @@ def fetch_sirix_data(user_id: Any) -> Optional[Dict[str, Any]]:
         is_purchase_group = "purchase" in str(group_name or "").lower()
 
         txns = data.get("MonetaryTransactions") or []
+
+        zero_balance_amount = None
+        for t in txns:
+            c = str(t.get("Comment", "")).lower()
+            if "zero balance" in c:
+                try:
+                    zero_balance_amount = abs(float(t.get("Amount") or 0))
+                except Exception:
+                    zero_balance_amount = None
+                break
+
         blown_up = any("zero balance" in str(t.get("Comment", "")).lower() for t in txns)
 
         plan = None
@@ -370,6 +378,7 @@ def fetch_sirix_data(user_id: Any) -> Optional[Dict[str, Any]]:
             "BlownUp": blown_up,
             "GroupName": group_name,
             "IsPurchaseGroup": is_purchase_group,
+            "ZeroBalanceAmount": zero_balance_amount,
         }
     except Exception as e:
         print(f"[!] fetch_sirix_data exception for UserID={user_id}: {e}")
@@ -387,62 +396,6 @@ def delete_if_exists(table: str, account_id: str) -> None:
     """DELETE by account_id."""
     pg_delete(table, {"account_id": f"eq.{account_id}"})
 
-def move_exclusive(account_id: str, target_table: str) -> None:
-    """
-    Move an account exclusively into one table:
-      - delete from other destination tables
-      - keep only in target_table
-    """
-    others = {TABLE_ACTIVE, TABLE_BLOWN, TABLE_PURCHASES, TABLE_PLAN50K} - {target_table}
-    for t in others:
-        delete_if_exists(t, account_id)
-
-def classify_and_payload(row_from_crm: Dict[str, Any],
-                         sirix: Optional[Dict[str, Any]],
-                         pct_change: Optional[float]) -> Tuple[str, Dict[str, Any]]:
-    """
-    Decide which table to upsert into + build the payload row.
-    Priority:
-      1) Blown-up (by Sirix MonetaryTransactions)
-      2) Purchases group (by Sirix GroupName)
-      3) Plan = 50000
-      4) Otherwise Active
-    """
-    account_id = norm_account_id(row_from_crm.get(CRM_COL_ACCOUNT_ID))
-    payload = {
-        "account_id": account_id,
-        "customer_name": row_from_crm.get(CRM_COL_CUSTOMER),
-        "country": (sirix or {}).get("Country") if sirix else None,
-        "plan": (sirix or {}).get("Plan") if sirix else None,
-        "balance": (sirix or {}).get("Balance") if sirix else None,
-        "equity": (sirix or {}).get("Equity") if sirix else None,
-        "open_pnl": (sirix or {}).get("OpenPnL") if sirix else None,
-        "pct_change": pct_change,
-    }
-
-    # 1) Blown-up
-    if sirix and sirix.get("BlownUp"):
-        return (TABLE_BLOWN, payload)
-
-    # 2) Purchases by API GroupName
-    if sirix and sirix.get("IsPurchaseGroup"):
-        payload["group_name"] = sirix.get("GroupName")
-        return (TABLE_PURCHASES, payload)
-
-    # 3) Plan = 50000
-    plan_val = None
-    if sirix:
-        try:
-            if sirix.get("Plan") is not None:
-                plan_val = float(sirix["Plan"])
-        except (TypeError, ValueError):
-            plan_val = None
-    if plan_val is not None and abs(plan_val - 50000.0) < 1e-6:
-        return (TABLE_PLAN50K, payload)
-
-    # 4) Otherwise Active
-    return (TABLE_ACTIVE, payload)
-
 def norm_account_id(v: Any) -> Optional[str]:
     """Normalize any id to a consistent string like '121477'."""
     if v is None or (isinstance(v, float) and math.isnan(v)):
@@ -454,236 +407,107 @@ def norm_account_id(v: Any) -> Optional[str]:
     except Exception:
         return s
 
-
-# --------------------------------------------------------------------
-# Baseline helpers (DB)
-# --------------------------------------------------------------------
-def get_current_baseline_at() -> Optional[datetime]:
-    """Return the most recent baseline_at (as datetime) or None."""
-    rows = pg_select(TABLE_BASELINE, "baseline_at", order="baseline_at", desc=True, limit=1)
-    if not rows:
-        return None
-    try:
-        return datetime.fromisoformat((rows[0]["baseline_at"] or "").replace("Z", "+00:00"))
-    except Exception:
-        return None
-
-def load_baseline_map() -> Dict[str, float]:
-    """
-    Load ALL baseline rows -> {normalized_account_id: baseline_equity}
-    Handles '121477.0' vs '121477' and CSV numbers like '2,500'.
-    """
-    rows = pg_select_all(TABLE_BASELINE, "account_id,baseline_equity")
-    out: Dict[str, float] = {}
-    for r in rows:
-        key = norm_account_id(r.get("account_id"))
-        if not key:
-            continue
-        val = r.get("baseline_equity")
-        if val is None:
-            continue
-        try:
-            num = float(str(val).replace(",", ""))  # allow '2,500'
-            out[key] = num
-        except Exception:
-            # skip unparsable values
-            pass
-    return out
-
-
-# --------------------------------------------------------------------
-# Runs with verbose logging
-# --------------------------------------------------------------------
-def seed_baseline(now_utc_iso: str) -> None:
-    """
-    Full crawl (for weekly baseline):
-      - Fetch CRM list
-      - Fetch Sirix for each
-      - Classify into tables
-      - For ACTIVE: write baseline (equity, baseline_at)
-    """
-    print("[BASELINE] Seeding weekly baseline…")
-    df = load_crm_filtered_df()
-    total = len(df)
-    if total == 0:
-        print("[BASELINE] No CRM rows to process.")
-        return
-
-    blown = purchases = plan50k = active = 0
-    start_ts = time.time()
-
-    for i, row in df.iterrows():
-        user_id = row.get(CRM_COL_ACCOUNT_ID)
-        print(f"[{i+1}/{total}] Fetching UserID: {user_id} ...")
-        sirix = fetch_sirix_data(user_id)
-
-        table, payload = classify_and_payload(row, sirix, None)
-
-        if table == TABLE_BLOWN:
-            blown += 1
-            print(f"    ↳ [BLOWN-UP] UserID {user_id} -> BlownUp table.")
-        elif table == TABLE_PURCHASES:
-            purchases += 1
-            print(f"    ↳ [PURCHASES(API)] UserID {user_id} -> Purchases table (GroupName='{(sirix or {}).get('GroupName')}').")
-        elif table == TABLE_PLAN50K:
-            plan50k += 1
-            print(f"    ↳ [PLAN=50000] UserID {user_id} -> Plan50000 table.")
-        else:
-            active += 1
-
-        upsert_row(table, payload)
-        move_exclusive(payload["account_id"], table)
-
-        # Baseline equity only for Active
-        if table == TABLE_ACTIVE:
-            eq = (sirix or {}).get("Equity")
-            if eq is not None:
-                upsert_row(TABLE_BASELINE, {
-                    "account_id": payload["account_id"],
-                    "baseline_equity": float(eq),
-                    "baseline_at": now_utc_iso,
-                })
-
-        if RATE_DELAY_SEC > 0:
-            time.sleep(RATE_DELAY_SEC)
-
-    elapsed = int(time.time() - start_ts)
-    mm, ss = divmod(elapsed, 60)
-
-    print("\n===== SUMMARY (BASELINE) =====")
-    print(f"Processed      : {total}")
-    print(f"Blown-up       : {blown}")
-    print(f"Purchases(API) : {purchases}")
-    print(f"Plan=50000     : {plan50k}")
-    print(f"Active (final) : {active}")
-    print(f"[PROCESS COMPLETE] Run time: {mm:02d}:{ss:02d} (MM:SS)")
-
-    print(f"[PROCESS COMPLETE] Run time: {mm:02d}:{ss:02d} (MM:SS)")
-    trigger_netlify_build("baseline seeded")
-
-
 def run_update() -> None:
     """
-    Incremental 2h update:
-      - Load baseline map
-      - Re-fetch CRM and Sirix
-      - Compute pct_change for ACTIVE (vs baseline_equity)
-      - Upsert to destination tables
+    Simple loop:
+    - Load CRM list from lv_tpaccount
+    - For each account_id (lv_name):
+        - fetch Sirix
+        - equity logic:
+            * if equity > 0 -> use it
+            * else if zero_balance_amount exists -> use abs(amount)
+            * else -> equity=None
+        - pct_change = (equity - START_EQUITY)/START_EQUITY * 100
+    - Upsert into e2t_demo_live
     """
-    print("[UPDATE] Running 2h update…")
-    base = load_baseline_map()
-
+    print("[UPDATE] Running demo update…")
     df = load_crm_filtered_df()
     total = len(df)
     if total == 0:
         print("[UPDATE] No CRM rows to process.")
         return
 
-    blown = purchases = plan50k = active = 0
-    pct_samples: List[float] = []
     start_ts = time.time()
 
     for i, row in df.iterrows():
+
         raw_id = row.get(CRM_COL_ACCOUNT_ID)
+
         aid = norm_account_id(raw_id)
+        if not aid:
+            print(f"[SKIP] Invalid account id: {raw_id}")
+            continue
+
+        cname = row.get(CRM_COL_CUSTOMER)
+        tname = row.get(CRM_COL_TEMP_NAME)
+
         print(f"[{i+1}/{total}] Fetching UserID: {raw_id} -> norm={aid} ...")
+        sirix = fetch_sirix_data(aid)
 
-        sirix = fetch_sirix_data(aid)  # fetch function also normalizes but this is safe
+        equity = None
+        open_pnl = None
+        group_name = None
+        source = "missing"
 
-        table, payload = classify_and_payload(row, sirix, None)
+        if sirix:
+            group_name = sirix.get("GroupName")
+            open_pnl = sirix.get("OpenPnL")
 
-        # enforce normalized id everywhere
-        payload["account_id"] = aid
+            eq = sirix.get("Equity")
+            zb = sirix.get("ZeroBalanceAmount")
 
-        # Only Active rows get pct_change
-        if table == TABLE_ACTIVE and sirix:
-            equity = sirix.get("Equity")
-            base_eq = base.get(aid)
-            pct_change = None
-            if base_eq not in (None, 0) and equity not in (None,):
-                try:
-                    pct_change = ((equity - base_eq) / base_eq) * 100.0
-                except Exception:
-                    pct_change = None
-            payload["pct_change"] = pct_change
+            # Prefer live equity if it's positive
+            try:
+                eq_val = float(eq) if eq is not None else None
+            except Exception:
+                eq_val = None
 
-            if pct_change is not None:
-                print(f"[WARN] No baseline match for account {aid}; equity={equity}, baseline={base_eq}")
+            if eq_val is not None and eq_val > 0:
+                equity = eq_val
+                source = "equity"
+            elif zb is not None and zb > 0:
+                equity = float(zb)
+                source = "zero_balance_txn"
 
-        if table == TABLE_BLOWN:
-            blown += 1
-            print(f"    ↳ [BLOWN-UP] UserID {aid} -> BlownUp table.")
-        elif table == TABLE_PURCHASES:
-            purchases += 1
-            print(f"    ↳ [PURCHASES(API)] UserID {aid} -> Purchases table (GroupName='{(sirix or {}).get('GroupName')}').")
-        elif table == TABLE_PLAN50K:
-            plan50k += 1
-            print(f"    ↳ [PLAN=50000] UserID {aid} -> Plan50000 table.")
-        else:
-            active += 1
+        pct_change = None
+        if equity is not None and START_EQUITY > 0:
+            pct_change = ((equity - START_EQUITY) / START_EQUITY) * 100.0
 
-        upsert_row(table, payload)
-        move_exclusive(aid, table)
+        payload = {
+            "account_id": aid,
+            "customer_name": cname,
+            "temp_name": tname,
+            "plan": START_EQUITY,         # always 50k
+            "equity": equity,
+            "open_pnl": open_pnl,
+            "pct_change": pct_change,
+            "source": source,
+            "group_name": group_name,
+            "updated_at": now_iso_utc(),
+        }
+
+        upsert_row(TABLE_LIVE, payload, on_conflict="account_id")
 
         if RATE_DELAY_SEC > 0:
             time.sleep(RATE_DELAY_SEC)
 
-    # Print Top3 % change from the run
-    top3 = sorted([x for x in pct_samples if x is not None], reverse=True)[:3]
     elapsed = int(time.time() - start_ts)
     mm, ss = divmod(elapsed, 60)
-
-    print("\n===== SUMMARY (UPDATE) =====")
-    print(f"Processed      : {total}")
-    print(f"Blown-up       : {blown}")
-    print(f"Purchases(API) : {purchases}")
-    print(f"Plan=50000     : {plan50k}")
-    print(f"Active (final) : {active}")
-    print(f"Top3 PctChange : {top3 if top3 else '[]'}")
-    print(f"[PROCESS COMPLETE] Run time: {mm:02d}:{ss:02d} (MM:SS)")
-
-    print(f"[PROCESS COMPLETE] Run time: {mm:02d}:{ss:02d} (MM:SS)")
-    trigger_netlify_build("2h update")
+    print(f"[UPDATE] Complete. Processed={total} runtime={mm:02d}:{ss:02d}")
+    trigger_netlify_build("demo update")
 
 
 # --------------------------------------------------------------------
-# Main scheduler (immediate run-now, then earliest-of baseline/2h tick)
+# Main scheduler (immediate run-now)
 # --------------------------------------------------------------------
 def main():
-    print(f"[SERVICE] E2T worker running. TZ={E2T_TZ_LABEL}, TEST_MODE={TEST_MODE}, RUN_NOW_ON_START={RUN_NOW_ON_START}")
-    print("[SERVICE] Baseline seeding is DISABLED. Worker will only run 2h updates.")
+    interval = int(os.environ.get("E2T_LOOP_SECONDS", "120"))  # 2 min default
+    print(f"[SERVICE] Demo worker running. interval={interval}s START_EQUITY={START_EQUITY}")
 
-    # TEST mode: just run an immediate update, then tick every 2h
-    if TEST_MODE:
-        print("[TEST MODE] Running immediate update.")
-        run_update()
-        next_run = next_2h_tick_wallclock(now_utc())
-        print(f"[SCHED] Next 2h update at {next_run.isoformat()}.")
-    else:
-        # Honor RUN_NOW_ON_START before any long sleeps
-        if RUN_NOW_ON_START:
-            print("[RUN-NOW] Running an immediate 2h update now.")
-            run_update()
-        next_run = next_2h_tick_wallclock(now_utc())
-        print(f"[SCHED] Next 2h update at {next_run.isoformat()}.")
-
-    # Main loop: wake up on each 2h wall-clock tick and run update
     while True:
-        now_dt = now_utc()
-        if next_run > now_dt:
-            secs = (next_run - now_dt).total_seconds()
-            hh = int(secs // 3600)
-            mm = int((secs % 3600) // 60)
-            ss = int(secs % 60)
-            print(f"[SCHED] Next run at {next_run.isoformat()} (in {hh:02d}:{mm:02d}:{ss:02d}).")
-            time.sleep(secs)
-
-        # Do the 2h update
         run_update()
-
-        # Plan next wake: next 2h tick
-        next_run = next_2h_tick_wallclock(now_utc())
-        print(f"[SCHED] Next 2h update at {next_run.isoformat()}.")
+        print(f"[SCHED] Sleeping {interval}s…")
+        time.sleep(interval)
 
 
 if __name__ == "__main__":
