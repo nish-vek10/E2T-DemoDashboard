@@ -737,7 +737,7 @@ export default function App() {
                       fontWeight: 800,
                       borderLeft: "6px solid transparent"
                     }}>
-                      ✯ 3–22
+                       ✯  3–22
                     </td>
                     <td style={{
                       height: 42, lineHeight: "42px",
