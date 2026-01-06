@@ -434,7 +434,7 @@ export default function App() {
     };
   }, []);
 
-  // ✅ Prize labels (1,2 special; 3–20 same label)
+  // Prize labels (1,2 special; 3–20 same label)
   const PRIZE_TOP_DESKTOP = {
     1: "$100,000 Funded Account",
     2: "$60,000 Funded Account",
