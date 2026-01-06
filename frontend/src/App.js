@@ -801,7 +801,7 @@ export default function App() {
                 border: "none"
               }}
             >
-              {/* ✅ column sizing to match your screenshot */}
+              {/* column sizing to match your screenshot */}
               <colgroup>
                 <col style={{ width: COL_RANK_W }} />
                 <col /> {/* NAME gets remaining space */}
@@ -850,7 +850,7 @@ export default function App() {
                     const highlight = rowStyleForRank(globalRank);
                     const rowStyle = { ...zebra, ...highlight };
 
-                    // ✅ only 1 & 2 get bigger font; 3+ identical
+                    // only 1 & 2 get bigger font; 3+ identical
                     let rowFontSize = "14px";
                     let rowFontWeight = 400;
                     if (globalRank === 0) { rowFontSize = "17px"; rowFontWeight = 800; }
@@ -861,7 +861,7 @@ export default function App() {
                     const n = numVal(row["pct_change"]);
                     const pctColor = n == null ? "#eaeaea" : (n > 0 ? "#34c759" : (n < 0 ? "#ff453a" : "#eaeaea"));
 
-                    // ✅ keep net% prominent but not huge for 3+
+                    // keep net% prominent but not huge for 3+
                     let pctFont = rowFontSize;
                     if (globalRank === 0) pctFont = "calc(17px + 6px)";
                     else if (globalRank === 1) pctFont = "calc(16px + 4px)";
@@ -869,34 +869,47 @@ export default function App() {
 
                     const cellBase = { whiteSpace: "nowrap", fontSize: rowFontSize, fontWeight: rowFontWeight };
 
+                    const rank1based = (typeof globalRank === "number" ? globalRank + 1 : null);
+                    const isAfter22 = rank1based === 22;
+
                     return (
-                      <tr key={id || rowIndex} style={rowStyle}>
-                        <td
-                          style={{
-                            ...cellBase,
-                            fontWeight: 800,
-                            borderLeft: globalRank <= 1 ? `8px solid ${leftAccent}` : "8px solid transparent",
-                            textAlign: "center",
-                          }}
-                        >
-                          {rankBadge(globalRank) || displayRank}
-                        </td>
+                      <React.Fragment key={id || rowIndex}>
+                        <tr style={rowStyle}>
+                          <td
+                            style={{
+                              ...cellBase,
+                              fontWeight: 800,
+                              borderLeft: globalRank <= 1 ? `8px solid ${leftAccent}` : "8px solid transparent",
+                              textAlign: "center",
+                            }}
+                          >
+                            {rankBadge(globalRank) || displayRank}
+                          </td>
 
-                        {/* NAME: center for screenshot look */}
-                        <td style={{ ...cellBase, textAlign: "center" }}>
-                          {shortName(row["customer_name"])}
-                        </td>
+                          <td style={{ ...cellBase, textAlign: "center" }}>
+                            {shortName(row["customer_name"])}
+                          </td>
 
-                        <td style={{ ...cellBase, textAlign: "center" }}>
-                          <span style={{ color: pctColor, fontWeight: 800, fontSize: pctFont }}>
-                            {fmtPct(n)}
-                          </span>
-                        </td>
+                          <td style={{ ...cellBase, textAlign: "center" }}>
+                            <span style={{ color: pctColor, fontWeight: 800, fontSize: pctFont }}>
+                              {fmtPct(n)}
+                            </span>
+                          </td>
 
-                        <td style={{ ...cellBase, textAlign: "center" }}>
-                          {getFlagOnly(row["country"])}
-                        </td>
-                      </tr>
+                          <td style={{ ...cellBase, textAlign: "center" }}>
+                            {getFlagOnly(row["country"])}
+                          </td>
+                        </tr>
+
+                        {/* Gold separator AFTER rank 22 */}
+                        {isAfter22 && (
+                          <tr>
+                            <td colSpan={4} style={{ padding: 0, background: "#121212" }}>
+                              <div style={{ height: 2, background: "#F4C430" }} />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })
                 )}
@@ -949,6 +962,14 @@ export default function App() {
                 <td style={{ padding: "10px 6px", textAlign: "center", fontWeight: 900, fontSize: 18 }}>{pad2(tleft.m)}</td>
                 <td style={{ padding: "10px 6px", textAlign: "center", fontWeight: 900, fontSize: 18 }}>{pad2(tleft.s)}</td>
               </tr>
+
+              {/* Gold separator line */}
+              <tr>
+                <td colSpan={4} style={{ padding: 0 }}>
+                  <div style={{ height: 2, background: "#F4C430" }} />
+                </td>
+              </tr>
+
               <tr>
                 <td colSpan={4} style={{ padding: "8px 6px", textAlign: "center", color: "#aaa", fontSize: 12 }}>
                   NEXT RESET: COMING 1ST @ 00:00 {londonTZ}
@@ -957,7 +978,6 @@ export default function App() {
             </tbody>
           </table>
 
-          {/* Removed the API footer per your request */}
         </div>
       </div>
     </div>
