@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pandas
+requests
+supabase
+psycopg2-binary
+openpyxl
+xlsxwriter
+python-dateutil
