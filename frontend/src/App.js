@@ -732,7 +732,7 @@ export default function App() {
                   {/* Rank 3–22 */}
                   <tr style={{ background: "#121212" }}>
                     <td style={{
-                      height: 42, lineHeight: "42px",
+                      height: 45, lineHeight: "45px",
                       padding: 0, paddingLeft: 8,
                       fontWeight: 800,
                       borderLeft: "6px solid transparent"
