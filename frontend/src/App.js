@@ -221,7 +221,7 @@ function shortName(full) {
 }
 
 /**
- * ✅ NEW: rank movement storage (last refresh order)
+ * NEW: rank movement storage (last refresh order)
  * - we store a map: { [account_id]: 0-based rank }
  * - movement: prev - current (positive => moved up)
  */
@@ -436,16 +436,16 @@ export default function App() {
 
   // ✅ Prize labels (1,2 special; 3–20 same label)
   const PRIZE_TOP_DESKTOP = {
-    1: "$10,000 Funded Account",
-    2: "$5,000 Funded Account",
+    1: "$100,000 Funded Account",
+    2: "$60,000 Funded Account",
   };
   const PRIZE_TOP_MOBILE = {
-    1: "$10K Account",
-    2: "$5K Account",
+    1: "$100K Account",
+    2: "$60K Account",
   };
 
-  const PRIZE_3_TO_20_DESKTOP = "$2,500 Funded Account";
-  const PRIZE_3_TO_20_MOBILE  = "$2.5K Account";
+  const PRIZE_3_TO_20_DESKTOP = "Discount of 22%";
+  const PRIZE_3_TO_20_MOBILE  = "22% Discount";
 
   const prizeLabel = (rank1based) => {
     if (rank1based === 1) return isMobile ? PRIZE_TOP_MOBILE[1] : PRIZE_TOP_DESKTOP[1];
