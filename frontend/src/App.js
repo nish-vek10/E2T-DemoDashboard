@@ -737,7 +737,7 @@ export default function App() {
                       fontWeight: 800,
                       borderLeft: "6px solid transparent"
                     }}>
-                      3–22
+                      ✯ 3–22
                     </td>
                     <td style={{
                       height: 42, lineHeight: "42px",
@@ -962,8 +962,6 @@ export default function App() {
                 <td style={{ padding: "10px 6px", textAlign: "center", fontWeight: 900, fontSize: 18 }}>{pad2(tleft.m)}</td>
                 <td style={{ padding: "10px 6px", textAlign: "center", fontWeight: 900, fontSize: 18 }}>{pad2(tleft.s)}</td>
               </tr>
-
-
 
               <tr>
                 <td colSpan={4} style={{ padding: "8px 6px", textAlign: "center", color: "#aaa", fontSize: 12 }}>
