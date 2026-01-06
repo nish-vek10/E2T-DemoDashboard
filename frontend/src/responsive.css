@@ -1,0 +1,38 @@
+/* ===== Minimal responsive rules (fresh + strong) ===== */
+
+/* Base: treat the 3-panel wrapper as a grid */
+.res-row{
+  display: grid !important;             /* <-- force grid (beats any old flex rule) */
+  gap: 18px;
+  align-items: start;
+  grid-template-columns: 1fr;           /* mobile-first: one column */
+}
+
+/* Desktop (>=1024px): keep your exact 3-column layout */
+@media (min-width: 1024px){
+  .res-row{
+    grid-template-columns: 260px 1fr 260px;
+  }
+}
+
+/* Names for clarity (no styles required here) */
+.panel-prizes{}
+.panel-leaderboard{}
+.panel-countdown{}
+
+/* Phones (<=767px): hide PRIZES, stack LEADERBOARD then COUNTDOWN */
+@media (max-width: 767px){
+  .panel-prizes{ display: none !important; }  /* <-- hide prizes on phones */
+
+  /* We rely on your HTML order: PRIZES, then LEADERBOARD, then COUNTDOWN.
+     With PRIZES hidden, it becomes LEADERBOARD first, COUNTDOWN second. */
+}
+
+/* Make the desktop table scroll horizontally on narrow screens */
+.table-wrap{ overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Tiny phone-only helpers (we'll use later if needed) */
+@media (max-width: 767px){
+  .mobile-h1{ font-size: clamp(1.6rem, 5vw, 2.2rem) !important; }
+  .mobile-w-full{ width: 100% !important; }
+}
