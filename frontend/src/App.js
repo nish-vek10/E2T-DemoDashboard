@@ -963,6 +963,14 @@ export default function App() {
                 <td style={{ padding: "10px 6px", textAlign: "center", fontWeight: 900, fontSize: 18 }}>{pad2(tleft.s)}</td>
               </tr>
 
+
+
+              <tr>
+                <td colSpan={4} style={{ padding: "8px 6px", textAlign: "center", color: "#aaa", fontSize: 12 }}>
+                  NEXT RESET: COMING 1ST @ 00:00 {londonTZ}
+                </td>
+              </tr>
+
               {/* Gold separator line */}
               <tr>
                 <td colSpan={4} style={{ padding: 0 }}>
@@ -970,11 +978,6 @@ export default function App() {
                 </td>
               </tr>
 
-              <tr>
-                <td colSpan={4} style={{ padding: "8px 6px", textAlign: "center", color: "#aaa", fontSize: 12 }}>
-                  NEXT RESET: COMING 1ST @ 00:00 {londonTZ}
-                </td>
-              </tr>
             </tbody>
           </table>
 
