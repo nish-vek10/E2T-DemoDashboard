@@ -280,23 +280,6 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
         const displayRank =
           globalRank >= 0 && Number.isInteger(globalRank) ? globalRank + 1 : "";
 
-        // movement arrow (▲/▼)
-        const prev = prevRankById?.[id];
-        const moved =
-          (typeof prev === "number" && typeof globalRank === "number")
-            ? (prev - globalRank)
-            : 0;
-
-        const arrow =
-          (typeof prev !== "number" || typeof globalRank !== "number")
-            ? <span style={{ width: 14, display: "inline-block" }} />
-            : moved > 0
-              ? <span style={{ color: "#3adf74", fontSize: 12, lineHeight: 1 }}>▲</span>
-              : moved < 0
-                ? <span style={{ color: "#ff5a52", fontSize: 12, lineHeight: 1 }}>▼</span>
-                : <span style={{ width: 14, display: "inline-block" }} />;
-
-
         const n = numVal(row.pct_change);
         const pctColor =
           n == null ? "#eaeaea" : n > 0 ? "#34c759" : n < 0 ? "#ff453a" : "#eaeaea";
@@ -342,7 +325,6 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
                 }}
                 aria-label={`Rank ${displayRank}`}
               >
-                {arrow}
                 {rankBadge(globalRank) || displayRank}
               </div>
 
@@ -642,7 +624,7 @@ export default function App() {
           animation: "gradientShift 6s ease-in-out infinite"
         }}
       >
-        E2T WEEKLY LEADERBOARD
+        E2T MONTHLY LEADERBOARD
       </h1>
 
       <div style={{ ...centerWrap }}>
@@ -857,23 +839,6 @@ export default function App() {
                     const globalRank = globalRankById[id];
                     const displayRank = (globalRank >= 0 && Number.isInteger(globalRank)) ? globalRank + 1 : "";
 
-                    // movement arrow (▲/▼)
-                    const prev = prevRankById?.[id];
-                    const moved =
-                      (typeof prev === "number" && typeof globalRank === "number")
-                        ? (prev - globalRank)
-                        : 0;
-
-                    const arrow =
-                      (typeof prev !== "number" || typeof globalRank !== "number")
-                        ? <span style={{ width: 14, display: "inline-block" }} />
-                        : moved > 0
-                          ? <span style={{ color: "#3adf74", fontSize: 12, lineHeight: 1 }}>▲</span>
-                          : moved < 0
-                            ? <span style={{ color: "#ff5a52", fontSize: 12, lineHeight: 1 }}>▼</span>
-                            : <span style={{ width: 14, display: "inline-block" }} />;
-
-
                     const zebra = { background: rowIndex % 2 === 0 ? "#121212" : "#0f0f0f" };
                     const highlight = rowStyleForRank(globalRank);
                     const rowStyle = { ...zebra, ...highlight };
@@ -899,43 +864,31 @@ export default function App() {
 
                     return (
                       <tr key={id || rowIndex} style={rowStyle}>
-                        <td style={{
-                          ...cellBase,
-                          fontWeight: 800,
-                          borderLeft: globalRank <= 1 ? `8px solid ${leftAccent}` : "8px solid transparent",
-                          textAlign: "center"
-                        }}>
-                        <span
+                        <td
                           style={{
-                            display: "inline-grid",
-                            gridTemplateColumns: "16px 28px",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            columnGap: 6,
-                            minWidth: 52,
+                            ...cellBase,
+                            fontWeight: 800,
+                            borderLeft: globalRank <= 1 ? `8px solid ${leftAccent}` : "8px solid transparent",
+                            textAlign: "center",
                           }}
                         >
-                          <span style={{ width: 16, display: "inline-flex", justifyContent: "center" }}>
-                            {arrow}
-                          </span>
-                          <span style={{ width: 28, textAlign: "left" }}>
-                            {rankBadge(globalRank) || displayRank}
-                          </span>
-                        </span>
-                      </td>>
+                          {rankBadge(globalRank) || displayRank}
+                        </td>
 
                         {/* NAME: center for screenshot look */}
                         <td style={{ ...cellBase, textAlign: "center" }}>
                           {shortName(row["customer_name"])}
                         </td>
 
-                        <td style={cellBase}>
+                        <td style={{ ...cellBase, textAlign: "center" }}>
                           <span style={{ color: pctColor, fontWeight: 800, fontSize: pctFont }}>
                             {fmtPct(n)}
                           </span>
                         </td>
 
-                        <td style={cellBase}>{getFlagOnly(row["country"])}</td>
+                        <td style={{ ...cellBase, textAlign: "center" }}>
+                          {getFlagOnly(row["country"])}
+                        </td>
                       </tr>
                     );
                   })
@@ -972,7 +925,7 @@ export default function App() {
             <thead style={gradientTheadStyle}>
               <tr>
                 <th colSpan={4} style={{ padding: "10px 8px", fontWeight: 900, textAlign: "center", fontSize: 14 }}>
-                  LEADERBOARD WEEKLY RESET
+                  LEADERBOARD MONTHLY RESET
                 </th>
               </tr>
             </thead>
