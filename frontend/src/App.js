@@ -12,7 +12,7 @@ const SUPABASE_ANON = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
 // demo table + no balance needed for UI
 const SB_SELECT =
-  "account_id,customer_name,country,plan,equity,open_pnl,pct_change,updated_at";
+  "account_id,customer_name,country,plan,equity,open_pnl,pct_change,time_taken_hours,updated_at";
 
 // fetch from demo live table (sorted by pct_change desc)
 const SB_ACTIVE_URL = `${SUPABASE_URL}/rest/v1/e2t_demo_live?select=${encodeURIComponent(
@@ -40,6 +40,19 @@ function numVal(v) {
   return Number.isNaN(n) ? null : n;
 }
 function pad2(n){ return String(n).padStart(2, "0"); }
+
+function fmtPeriodDHMS(hoursVal) {
+  const h = Number(hoursVal);
+  if (!Number.isFinite(h) || h <= 0) return "00D-00H-00M";
+
+  const totalMinutes = Math.floor(h * 60);
+  const d = Math.floor(totalMinutes / (24 * 60));
+  const rem = totalMinutes % (24 * 60);
+  const hh = Math.floor(rem / 60);
+  const mm = rem % 60;
+
+  return `${pad2(d)}D-${pad2(hh)}H-${pad2(mm)}M`;
+}
 
 // === Countdown helpers ===
 // === Monthly Reset (GMT/UTC): 00:00:00 on the 1st of the next month ===
@@ -374,6 +387,19 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
               >
                 {fmtPct(n)}
               </span>
+
+              <div
+                style={{
+                  justifySelf: "end",
+                  color: "#aaa",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  marginTop: 6,
+                }}
+              >
+                {fmtPeriodDHMS(row.time_taken_hours)}
+              </div>
+
             </div>
           </div>
         );
@@ -498,6 +524,7 @@ export default function App() {
         equity: r.equity ?? null,
         open_pnl: r.open_pnl ?? null,
         pct_change: r.pct_change ?? null,
+        time_taken_hours: r.time_taken_hours ?? null,
         updated_at: r.updated_at ?? null,
       });
 
@@ -596,6 +623,7 @@ export default function App() {
   // desktop column sizing (rank tighter, name wider, net% prominent, flag fixed)
   const COL_RANK_W = 80;
   const COL_NET_W  = 180;
+  const COL_TIME_W = 140;
   const COL_FLAG_W = 110;
 
   return (
@@ -807,12 +835,13 @@ export default function App() {
                 <col style={{ width: COL_RANK_W }} />
                 <col /> {/* NAME gets remaining space */}
                 <col style={{ width: COL_NET_W }} />
+                <col style={{ width: COL_TIME_W }} />
                 <col style={{ width: COL_FLAG_W }} />
               </colgroup>
 
               <thead ref={theadRef}>
                 <tr>
-                  {["RANK", "NAME", "NET %", "COUNTRY"].map((label, idx, arr) => (
+                  {["RANK", "NAME", "NET %", "TIME", "COUNTRY"].map((label, idx, arr) => (
                     <th
                       key={idx}
                       style={{
@@ -896,6 +925,10 @@ export default function App() {
                             <span style={{ color: pctColor, fontWeight: 800, fontSize: pctFont }}>
                               {fmtPct(n)}
                             </span>
+                          </td>
+
+                          <td style={{ ...cellBase, textAlign: "center", fontWeight: 700, color: "#eaeaea" }}>
+                            {fmtPeriodDHMS(row["time_taken_hours"])}
                           </td>
 
                           <td style={{ ...cellBase, textAlign: "center" }}>
