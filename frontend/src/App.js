@@ -352,7 +352,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
             role="listitem"
             style={{
               background: bg,
-              border: "1px solid ${cardBorderColor}`",
+              border: 1px solid ${cardBorderColor}`,
               borderRadius: 12,
               padding: 12,
               display: "grid",
@@ -376,7 +376,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
                   fontWeight: isTop1 ? 1000 : isTop2 ? 900 : 800,
                   color: globalRank <= 1 ? "#d4af37" : "#eaeaea",
                   padding: "0 6px",
-                  gap: 4
+                  gap: 4,
                   transform: isTop1 ? "scale(1.05)" : isTop2 ? "scale(1.03)" : "none",
                 }}
                 aria-label={`Rank ${displayRank}`}
