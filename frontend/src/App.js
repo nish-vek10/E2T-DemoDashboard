@@ -329,6 +329,16 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
           n == null ? "#eaeaea" : n > 0 ? "#34c759" : n < 0 ? "#ff453a" : "#eaeaea";
 
         // top-2 subtle highlight (keep modern + readable)
+        const isTop1 = globalRank === 0;
+        const isTop2 = globalRank === 1;
+
+        const leftStripColor = isTop1 ? "#F4C430" : isTop2 ? "#B0B7C3" : "transparent";
+        const cardBorderColor = isTop1
+          ? "rgba(244,196,48,0.35)"
+          : isTop2
+          ? "rgba(176,183,195,0.30)"
+          : "#2a2a2a";
+
         const bg =
           globalRank === 0
             ? "linear-gradient(135deg, rgba(212,175,55,0.22) 0%, #161616 100%)"
@@ -342,11 +352,12 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
             role="listitem"
             style={{
               background: bg,
-              border: "1px solid #2a2a2a",
+              border: "1px solid ${cardBorderColor}`",
               borderRadius: 12,
               padding: 12,
               display: "grid",
               gap: 8,
+              borderLeft: `6px solid ${leftStripColor}`,
             }}
           >
             {/* Row 1: rank + name + country flag */}
@@ -362,10 +373,11 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontWeight: 800,
+                  fontWeight: isTop1 ? 1000 : isTop2 ? 900 : 800,
                   color: globalRank <= 1 ? "#d4af37" : "#eaeaea",
                   padding: "0 6px",
                   gap: 4
+                  transform: isTop1 ? "scale(1.05)" : isTop2 ? "scale(1.03)" : "none",
                 }}
                 aria-label={`Rank ${displayRank}`}
               >
@@ -376,6 +388,8 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
                 style={{
                   fontWeight: 700,
                   fontSize: 14,
+                  fontWeight: isTop1 ? 900 : isTop2 ? 800 : 700,
+                  fontSize: isTop1 ? 16 : isTop2 ? 15 : 14,
                   color: "#f2f2f2",
                   flex: 1,
                   overflow: "hidden",
@@ -408,10 +422,11 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
                   border: "1px solid #2a2a2a",
                   borderRadius: 999,
                   padding: "6px 10px",
-                  fontWeight: 900,
+                  fontWeight: isTop1 ? 1000 : isTop2 ? 950 : 900,
                   color: pctColor,
                   minWidth: 80,
                   textAlign: "center",
+                  fontSize: isTop1 ? 15 : isTop2 ? 14 : 13,
                 }}
                 aria-label="Net percent change"
               >
@@ -423,8 +438,11 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
                   justifySelf: "end",
                   color: "#aaa",
                   fontSize: 12,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   marginTop: 6,
+                  minWidth: 80,          // matches Net% pill
+                  textAlign: "center",   // keeps it lined up perfectly
+                  fontVariantNumeric: "tabular-nums", // makes digits align cleanly
                 }}
               >
                 {fmtDDHHMM(row.time_taken_hours)}
