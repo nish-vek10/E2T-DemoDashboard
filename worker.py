@@ -257,7 +257,7 @@ def next_2h_tick_wallclock(now_dt: datetime) -> datetime:
 # --------------------------------------------------------------------
 # Date parsing helpers (Sirix can return different keys/formats)
 # --------------------------------------------------------------------
-CUTOFF_CREATED_AT = datetime(2023, 11, 1, 0, 0, 0, tzinfo=timezone.utc)
+CUTOFF_CREATED_AT = datetime(2025, 11, 1, 0, 0, 0, tzinfo=timezone.utc)
 
 def parse_dt_any(v: Any) -> Optional[datetime]:
     """
