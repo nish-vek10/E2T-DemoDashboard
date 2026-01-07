@@ -253,6 +253,21 @@ def next_2h_tick_wallclock(now_dt: datetime) -> datetime:
         day = day + timedelta(days=1)
     return datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc).replace(hour=next_hour)
 
+def format_period(created_dt: Optional[datetime], closed_dt: Optional[datetime]) -> str:
+    # Requirement: if no closed positions (or missing dates) show zeros
+    if not created_dt or not closed_dt or closed_dt < created_dt:
+        return "00D-00H-00M"
+
+    delta = closed_dt - created_dt
+    total_minutes = int(delta.total_seconds() // 60)
+
+    days = total_minutes // (24 * 60)
+    rem = total_minutes % (24 * 60)
+    hours = rem // 60
+    minutes = rem % 60
+
+    return f"{days:02d}D-{hours:02d}H-{minutes:02d}M"
+
 
 # --------------------------------------------------------------------
 # Date parsing helpers (Sirix can return different keys/formats)
@@ -388,12 +403,16 @@ def fetch_sirix_data(user_id: Any) -> Optional[Dict[str, Any]]:
 
         txns = data.get("MonetaryTransactions") or []
 
-        # ---- created_at: earliest monetary transaction time ----
-        created_at_dt = None
-        for t in txns:
-            dt = pick_first_dt(t, ["CreateDate", "CreatedAt", "Date", "TransactionDate", "Time"])
-            if dt is not None:
-                created_at_dt = dt if created_at_dt is None else min(created_at_dt, dt)
+        # ---- created_at: Prefer account creation time from UserDetails ----
+        user_details = (data.get("UserData") or {}).get("UserDetails") or {}
+        created_at_dt = pick_first_dt(user_details, ["CreationTime", "CreatedAt", "CreateDate", "Time"])
+
+        # Fallback: earliest monetary transaction time (if CreationTime missing)
+        if created_at_dt is None:
+            for t in txns:
+                dt = pick_first_dt(t, ["CreateDate", "CreatedAt", "Date", "TransactionDate", "Time"])
+                if dt is not None:
+                    created_at_dt = dt if created_at_dt is None else min(created_at_dt, dt)
 
         # ---- last_closed_at: latest close position time ----
         close_positions = data.get("ClosePositions") or data.get("ClosedPositions") or []
@@ -556,11 +575,26 @@ def run_update() -> None:
         if pct_change is not None:
             pct_display = min(float(pct_change), 100.0)
 
-        time_taken_hours = None
-        created_dt = parse_dt_any(created_at) if 'created_at' in locals() else None
-        closed_dt  = parse_dt_any(last_closed_at) if 'last_closed_at' in locals() else None
-        if created_dt and closed_dt and closed_dt >= created_dt:
+        created_dt = parse_dt_any(created_at)
+        closed_dt = parse_dt_any(last_closed_at)
+
+        # Require created_dt so cutoff is enforceable
+        if created_dt is None:
+            print(f"[FILTER] Skip id={aid} missing created_at/CreationTime (cannot apply cutoff)")
+            continue
+
+        # Filter: only include accounts created ON/AFTER 2025-11-01 UTC
+        if created_dt < CUTOFF_CREATED_AT:
+            print(f"[FILTER] Skip id={aid} created_at={created_dt.isoformat()} (before cutoff)")
+            continue
+
+        # time_taken_hours: 0 if no closed positions yet
+        time_taken_hours = 0.0
+        if closed_dt and closed_dt >= created_dt:
             time_taken_hours = (closed_dt - created_dt).total_seconds() / 3600.0
+
+        # period: always a string like 02D-12H-34M (or zeros)
+        period = format_period(created_dt, closed_dt)
 
         # Print a quick “value line” so you can visually confirm it works
         # (limit spam: only first 10 rows OR every heartbeat)
@@ -569,11 +603,6 @@ def run_update() -> None:
                 f"[DATA] id={aid} equity={equity} open_pnl={open_pnl} "
                 f"pct={pct_change if pct_change is not None else None} source={source} group={group_name}"
             )
-
-        # Filter: only include accounts created AFTER 2025-11-01 UTC
-        if created_dt is not None and created_dt < CUTOFF_CREATED_AT:
-            print(f"[FILTER] Skip id={aid} created_at={created_dt.isoformat()} (before cutoff)")
-            continue
 
         payload = {
             "account_id": aid,
@@ -589,6 +618,7 @@ def run_update() -> None:
             "created_at": created_at,
             "last_closed_at": last_closed_at,
             "time_taken_hours": time_taken_hours,
+            "period": period,
             "source": source,
             "group_name": group_name,
             "updated_at": now_iso_utc(),

@@ -89,7 +89,7 @@ def data_latest(
                     sb.table("e2t_demo_live")
                     .select(
                         "account_id,customer_name,temp_name,country,plan,equity,open_pnl,pct_change,"
-                        "pct_display,created_at,last_closed_at,time_taken_hours,source,group_name,updated_at")
+                        "pct_display,created_at,last_closed_at,time_taken_hours,period,source,group_name,updated_at")
                     .order("pct_display", desc=True)
                     .order("time_taken_hours", desc=False)
                     .limit(limit)
