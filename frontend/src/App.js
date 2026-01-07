@@ -652,7 +652,7 @@ export default function App() {
 
   // desktop column sizing (rank tighter, name wider, net% prominent, flag fixed)
   const COL_RANK_W = 80;
-  const COL_NET_W  = 180;
+  const COL_NET_W  = 140;
   const COL_TIME_W = 110;
   const COL_FLAG_W = 110;
 
