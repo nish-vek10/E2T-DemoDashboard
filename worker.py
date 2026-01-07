@@ -255,6 +255,43 @@ def next_2h_tick_wallclock(now_dt: datetime) -> datetime:
 
 
 # --------------------------------------------------------------------
+# Date parsing helpers (Sirix can return different keys/formats)
+# --------------------------------------------------------------------
+CUTOFF_CREATED_AT = datetime(2023, 11, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+def parse_dt_any(v: Any) -> Optional[datetime]:
+    """
+    Try to parse Sirix datetime strings robustly.
+    Accepts ISO strings with/without Z, sometimes "2025-11-01T12:34:56".
+    Returns timezone-aware UTC datetime when possible.
+    """
+    if not v:
+        return None
+    try:
+        s = str(v).strip()
+        if not s:
+            return None
+        # normalize Z
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        # make tz-aware (assume UTC if tz missing)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+def pick_first_dt(obj: Dict[str, Any], keys: List[str]) -> Optional[datetime]:
+    for k in keys:
+        if k in obj:
+            dt = parse_dt_any(obj.get(k))
+            if dt is not None:
+                return dt
+    return None
+
+
+# --------------------------------------------------------------------
 # CRM loader with pagination
 # --------------------------------------------------------------------
 def fetch_crm_chunk(offset: int, limit: int) -> List[Dict[str, Any]]:
@@ -329,7 +366,7 @@ def fetch_sirix_data(user_id: Any) -> Optional[Dict[str, Any]]:
             "UserID": clean_user_id,
             "GetOpenPositions": False,
             "GetPendingPositions": False,
-            "GetClosePositions": False,
+            "GetClosePositions": True,
             "GetMonetaryTransactions": True,
         }
 
@@ -350,6 +387,21 @@ def fetch_sirix_data(user_id: Any) -> Optional[Dict[str, Any]]:
         is_purchase_group = "purchase" in str(group_name or "").lower()
 
         txns = data.get("MonetaryTransactions") or []
+
+        # ---- created_at: earliest monetary transaction time ----
+        created_at_dt = None
+        for t in txns:
+            dt = pick_first_dt(t, ["CreateDate", "CreatedAt", "Date", "TransactionDate", "Time"])
+            if dt is not None:
+                created_at_dt = dt if created_at_dt is None else min(created_at_dt, dt)
+
+        # ---- last_closed_at: latest close position time ----
+        close_positions = data.get("ClosePositions") or data.get("ClosedPositions") or []
+        last_closed_dt = None
+        for p in close_positions:
+            dt = pick_first_dt(p, ["CloseTime", "CloseDate", "CloseDatetime", "CloseAt", "Date", "Time"])
+            if dt is not None:
+                last_closed_dt = dt if last_closed_dt is None else max(last_closed_dt, dt)
 
         zero_balance_amount = None
         for t in txns:
@@ -379,6 +431,8 @@ def fetch_sirix_data(user_id: Any) -> Optional[Dict[str, Any]]:
             "GroupName": group_name,
             "IsPurchaseGroup": is_purchase_group,
             "ZeroBalanceAmount": zero_balance_amount,
+            "CreatedAt": created_at_dt.isoformat() if created_at_dt else None,
+            "LastClosedAt": last_closed_dt.isoformat() if last_closed_dt else None,
         }
     except Exception as e:
         print(f"[!] fetch_sirix_data exception for UserID={user_id}: {e}")
@@ -472,6 +526,9 @@ def run_update() -> None:
             eq = sirix.get("Equity")
             zb = sirix.get("ZeroBalanceAmount")
 
+            created_at = sirix.get("CreatedAt")
+            last_closed_at = sirix.get("LastClosedAt")
+
             try:
                 eq_val = float(eq) if eq is not None else None
             except Exception:
@@ -495,6 +552,16 @@ def run_update() -> None:
         if equity is not None and START_EQUITY > 0:
             pct_change = ((equity - START_EQUITY) / START_EQUITY) * 100.0
 
+        pct_display = None
+        if pct_change is not None:
+            pct_display = min(float(pct_change), 100.0)
+
+        time_taken_hours = None
+        created_dt = parse_dt_any(created_at) if 'created_at' in locals() else None
+        closed_dt  = parse_dt_any(last_closed_at) if 'last_closed_at' in locals() else None
+        if created_dt and closed_dt and closed_dt >= created_dt:
+            time_taken_hours = (closed_dt - created_dt).total_seconds() / 3600.0
+
         # Print a quick “value line” so you can visually confirm it works
         # (limit spam: only first 10 rows OR every heartbeat)
         if (processed < 10) or ((processed + 1) % HEARTBEAT_EVERY == 0):
@@ -502,6 +569,11 @@ def run_update() -> None:
                 f"[DATA] id={aid} equity={equity} open_pnl={open_pnl} "
                 f"pct={pct_change if pct_change is not None else None} source={source} group={group_name}"
             )
+
+        # Filter: only include accounts created AFTER 2025-11-01 UTC
+        if created_dt is not None and created_dt < CUTOFF_CREATED_AT:
+            print(f"[FILTER] Skip id={aid} created_at={created_dt.isoformat()} (before cutoff)")
+            continue
 
         payload = {
             "account_id": aid,
@@ -513,6 +585,10 @@ def run_update() -> None:
             "equity": equity,
             "open_pnl": open_pnl,
             "pct_change": pct_change,
+            "pct_display": pct_display,
+            "created_at": created_at,
+            "last_closed_at": last_closed_at,
+            "time_taken_hours": time_taken_hours,
             "source": source,
             "group_name": group_name,
             "updated_at": now_iso_utc(),

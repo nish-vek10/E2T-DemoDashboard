@@ -85,13 +85,17 @@ def data_latest(
     Returns the one table the frontend needs:
       - e2t_demo_live (sorted by pct_change DESC)
     """
-    demo_live = fetch_table_sorted(
-        "e2t_demo_live",
-        order_col="pct_change",
-        desc=True,
-        limit=limit,
-        extra_select="account_id,customer_name,temp_name,plan,equity,open_pnl,pct_change,source,group_name,updated_at",
-    )
+    demo_live = (
+                    sb.table("e2t_demo_live")
+                    .select(
+                        "account_id,customer_name,temp_name,country,plan,equity,open_pnl,pct_change,"
+                        "pct_display,created_at,last_closed_at,time_taken_hours,source,group_name,updated_at")
+                    .order("pct_display", desc=True)
+                    .order("time_taken_hours", desc=False)
+                    .limit(limit)
+                    .execute()
+                    .data
+                ) or []
 
     return {
         "ts": _now_iso(),
