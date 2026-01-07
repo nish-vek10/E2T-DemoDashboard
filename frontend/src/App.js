@@ -281,6 +281,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
           globalRank >= 0 && Number.isInteger(globalRank) ? globalRank + 1 : "";
 
         const n = numVal(row.pct_change);
+        const n = (nRaw == null) ? null : Math.min(nRaw, 100);
         const pctColor =
           n == null ? "#eaeaea" : n > 0 ? "#34c759" : n < 0 ? "#ff453a" : "#eaeaea";
 
@@ -859,6 +860,7 @@ export default function App() {
                     const leftAccent = accentForRank(globalRank);
 
                     const n = numVal(row["pct_change"]);
+                    const n = (nRaw == null) ? null : Math.min(nRaw, 100);
                     const pctColor = n == null ? "#eaeaea" : (n > 0 ? "#34c759" : (n < 0 ? "#ff453a" : "#eaeaea"));
 
                     // keep net% prominent but not huge for 3+
