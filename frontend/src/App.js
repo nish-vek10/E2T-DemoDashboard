@@ -630,7 +630,7 @@ export default function App() {
   const top30Data = useMemo(() => originalData.slice(0, 30), [originalData]);
   const rowsToRender = useMemo(() => (searchQuery ? data : top30Data), [searchQuery, data, top30Data]);
 
-  const centerWrap = { maxWidth: 1180, margin: "0 auto" };
+  const centerWrap = { maxWidth: 1400, margin: "0 auto" };
   const gradientTheadStyle = {
     background: "linear-gradient(135deg, #0f0f0f 0%, #222 60%, #d4af37 100%)",
     color: "#fff"
