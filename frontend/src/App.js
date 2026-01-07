@@ -969,7 +969,7 @@ export default function App() {
                         {/* Gold separator AFTER rank 22 */}
                         {isAfter22 && (
                           <tr>
-                            <td colSpan={4} style={{ padding: 0, background: "#121212" }}>
+                            <td colSpan={5} style={{ padding: 0, background: "#121212" }}>
                               <div style={{ height: 2, background: "#F4C430" }} />
                             </td>
                           </tr>
