@@ -578,14 +578,16 @@ def run_update() -> None:
         created_dt = parse_dt_any(created_at)
         closed_dt = parse_dt_any(last_closed_at)
 
-        # Require created_dt so cutoff is enforceable
+        # If we can't determine creation time, skip (and remove any stale row)
         if created_dt is None:
-            print(f"[FILTER] Skip id={aid} missing created_at/CreationTime (cannot apply cutoff)")
+            print(f"[FILTER] Skip id={aid} missing CreationTime; deleting stale row if exists")
+            delete_if_exists(TABLE_LIVE, aid)
             continue
 
-        # Filter: only include accounts created ON/AFTER 2025-11-01 UTC
+        # Cutoff enforcement (and cleanup stale rows)
         if created_dt < CUTOFF_CREATED_AT:
-            print(f"[FILTER] Skip id={aid} created_at={created_dt.isoformat()} (before cutoff)")
+            print(f"[FILTER] Skip id={aid} created_at={created_dt.isoformat()} (before cutoff) -> delete stale row")
+            delete_if_exists(TABLE_LIVE, aid)
             continue
 
         # time_taken_hours: 0 if no closed positions yet
