@@ -328,7 +328,6 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
         const pctColor =
           n == null ? "#eaeaea" : n > 0 ? "#34c759" : n < 0 ? "#ff453a" : "#eaeaea";
 
-        // top-2 subtle highlight (keep modern + readable)
         const isTop1 = globalRank === 0;
         const isTop2 = globalRank === 1;
 
@@ -340,9 +339,9 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
           : "#2a2a2a";
 
         const bg =
-          globalRank === 0
+          isTop1
             ? "linear-gradient(135deg, rgba(212,175,55,0.22) 0%, #161616 100%)"
-            : globalRank === 1
+            : isTop2
             ? "linear-gradient(135deg, rgba(176,183,195,0.18) 0%, #161616 100%)"
             : "#181818";
 
@@ -352,7 +351,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
             role="listitem"
             style={{
               background: bg,
-              border: 1px solid ${cardBorderColor}`,
+              border: `1px solid ${cardBorderColor}`,
               borderRadius: 12,
               padding: 12,
               display: "grid",
@@ -386,8 +385,6 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
 
               <div
                 style={{
-                  fontWeight: 700,
-                  fontSize: 14,
                   fontWeight: isTop1 ? 900 : isTop2 ? 800 : 700,
                   fontSize: isTop1 ? 16 : isTop2 ? 15 : 14,
                   color: "#f2f2f2",
@@ -404,7 +401,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
               <div>{getFlagOnly(row.country)}</div>
             </div>
 
-            {/* Row 2: Net % only (capital removed) */}
+            {/* Row 2: Net % + time aligned under it */}
             <div
               style={{
                 display: "grid",
@@ -413,41 +410,40 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
                 gap: 10,
               }}
             >
-              <div /> {/* spacer to keep layout balanced */}
+              <div />
 
-              <span
-                style={{
-                  justifySelf: "end",
-                  background: "#101010",
-                  border: "1px solid #2a2a2a",
-                  borderRadius: 999,
-                  padding: "6px 10px",
-                  fontWeight: isTop1 ? 1000 : isTop2 ? 950 : 900,
-                  color: pctColor,
-                  minWidth: 80,
-                  textAlign: "center",
-                  fontSize: isTop1 ? 15 : isTop2 ? 14 : 13,
-                }}
-                aria-label="Net percent change"
-              >
-                {fmtPct(n)}
-              </span>
+              <div style={{ justifySelf: "end", display: "grid", justifyItems: "center", gap: 6 }}>
+                <span
+                  style={{
+                    background: "#101010",
+                    border: "1px solid #2a2a2a",
+                    borderRadius: 999,
+                    padding: "6px 10px",
+                    fontWeight: isTop1 ? 1000 : isTop2 ? 950 : 900,
+                    color: pctColor,
+                    minWidth: 92,
+                    textAlign: "center",
+                    fontSize: isTop1 ? 15 : isTop2 ? 14 : 13,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                  aria-label="Net percent change"
+                >
+                  {fmtPct(n)}
+                </span>
 
-              <div
-                style={{
-                  justifySelf: "end",
-                  color: "#aaa",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  marginTop: 6,
-                  minWidth: 80,          // matches Net% pill
-                  textAlign: "center",   // keeps it lined up perfectly
-                  fontVariantNumeric: "tabular-nums", // makes digits align cleanly
-                }}
-              >
-                {fmtDDHHMM(row.time_taken_hours)}
+                <div
+                  style={{
+                    color: "#aaa",
+                    fontSize: 12,
+                    fontWeight: 650,
+                    minWidth: 92,
+                    textAlign: "center",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {fmtDDHHMM(row.time_taken_hours)}
+                </div>
               </div>
-
             </div>
           </div>
         );
@@ -455,6 +451,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
     </div>
   );
 }
+
 
 export default function App() {
   const [originalData, setOriginalData] = useState([]);
