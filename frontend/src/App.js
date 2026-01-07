@@ -54,6 +54,36 @@ function fmtPeriodDHMS(hoursVal) {
   return `${pad2(d)}D-${pad2(hh)}H-${pad2(mm)}M`;
 }
 
+function fmtHHMMSS(hoursVal) {
+  const h = Number(hoursVal);
+  if (!Number.isFinite(h) || h <= 0) return "00:00:00";
+
+  let totalSeconds = Math.floor(h * 3600);
+
+  const hh = Math.floor(totalSeconds / 3600);
+  totalSeconds -= hh * 3600;
+
+  const mm = Math.floor(totalSeconds / 60);
+  const ss = totalSeconds - mm * 60;
+
+  return `${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
+}
+
+function fmtDDHHMM(hoursVal) {
+  const h = Number(hoursVal);
+  if (!Number.isFinite(h) || h <= 0) return "00:00:00";
+
+  const totalMinutes = Math.floor(h * 60);
+
+  const dd = Math.floor(totalMinutes / (24 * 60));
+  const rem = totalMinutes % (24 * 60);
+
+  const hh = Math.floor(rem / 60);
+  const mm = rem % 60;
+
+  return `${pad2(dd)}:${pad2(hh)}:${pad2(mm)}`;
+}
+
 // === Countdown helpers ===
 // === Monthly Reset (GMT/UTC): 00:00:00 on the 1st of the next month ===
 function getNextMonthResetTarget(now = new Date()) {
@@ -397,7 +427,7 @@ function MobileLeaderboardCards({ rows, rowsTop30, globalRankById, prevRankById 
                   marginTop: 6,
                 }}
               >
-                {fmtPeriodDHMS(row.time_taken_hours)}
+                {fmtDDHHMM(row.time_taken_hours)}
               </div>
 
             </div>
@@ -841,7 +871,7 @@ export default function App() {
 
               <thead ref={theadRef}>
                 <tr>
-                  {["RANK", "NAME", "NET %", "TIME", "COUNTRY"].map((label, idx, arr) => (
+                  {["RANK", "NAME", "NET %", "TIME (DD:HH:MM)", "COUNTRY"].map((label, idx, arr) => (
                     <th
                       key={idx}
                       style={{
@@ -927,8 +957,8 @@ export default function App() {
                             </span>
                           </td>
 
-                          <td style={{ ...cellBase, textAlign: "center", fontWeight: 700, color: "#eaeaea" }}>
-                            {fmtPeriodDHMS(row["time_taken_hours"])}
+                          <td style={{ ...cellBase, textAlign: "center", fontWeight: 500, color: "#eaeaea" }}>
+                            {fmtDDHHMM(row["time_taken_hours"])}
                           </td>
 
                           <td style={{ ...cellBase, textAlign: "center" }}>
