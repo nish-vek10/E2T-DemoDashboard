@@ -272,7 +272,7 @@ def format_period(created_dt: Optional[datetime], closed_dt: Optional[datetime])
 # --------------------------------------------------------------------
 # Date parsing helpers (Sirix can return different keys/formats)
 # --------------------------------------------------------------------
-CUTOFF_CREATED_AT = datetime(2025, 11, 1, 0, 0, 0, tzinfo=timezone.utc)
+CUTOFF_CREATED_AT = datetime(2026, 01, 12, 0, 0, 0, tzinfo=timezone.utc)
 
 def parse_dt_any(v: Any) -> Optional[datetime]:
     """

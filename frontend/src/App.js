@@ -698,7 +698,7 @@ export default function App() {
           animation: "gradientShift 6s ease-in-out infinite"
         }}
       >
-        E2T MONTHLY LEADERBOARD
+        E2T MONTHLY TRADING COMPETITION
       </h1>
 
       <div style={{ ...centerWrap }}>
